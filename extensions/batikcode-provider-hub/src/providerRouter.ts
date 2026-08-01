@@ -19,9 +19,11 @@ import {
 	resolveFallbackChain,
 	responseError,
 	stringValue,
-	toOpenAiMessage
+	toOpenAiMessage,
+	type NormalizedChatMessage,
+	type NormalizedToolCall,
+	type ProviderConfiguration
 } from './providerRouterUtils';
-import type { NormalizedChatMessage, NormalizedToolCall, ProviderConfiguration } from './providerRouterUtils';
 
 export {
 	cooldownDuration,
@@ -343,7 +345,7 @@ export class ProviderRouter {
 			customHeaderPrefix = await vscode.window.showInputBox({
 				title: `${provider.name} authentication prefix`,
 				value: current.customHeaderPrefix ?? 'Bearer ',
-				prompt: 'Optional value prefix, for example “Bearer ”.',
+				prompt: 'Optional value prefix, for example "Bearer ".',
 				ignoreFocusOut: true
 			});
 			if (customHeaderPrefix === undefined) {
@@ -599,7 +601,7 @@ export class ProviderRouter {
 		const provider = PROVIDERS.find(candidate => candidate.id === providerId && candidate.routing)
 			?? PROVIDERS.find(candidate => candidate.vendor === providerId && candidate.routing);
 		if (!provider) {
-			throw new Error(`Provider “${providerId}” does not have a BatikCode routing adapter.`);
+			throw new Error(`Provider "${providerId}" does not have a BatikCode routing adapter.`);
 		}
 		return provider;
 	}

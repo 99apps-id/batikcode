@@ -77,7 +77,7 @@ export class ChatSimpleToolProgressPart extends BaseChatToolInvocationSubPart {
 			inputPart,
 			outputParts ? { parts: outputParts } : undefined,
 			isError,
-		ChatSimpleToolProgressPart._expandedByDefault.get(toolInvocation) ?? false,
+			ChatSimpleToolProgressPart._expandedByDefault.get(toolInvocation) ?? false,
 			shouldShimmerForTool(toolInvocation, message),
 		));
 		this._register(toDisposable(() => ChatSimpleToolProgressPart._expandedByDefault.set(toolInvocation, collapsibleListPart.expanded)));

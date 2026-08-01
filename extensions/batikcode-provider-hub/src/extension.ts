@@ -862,7 +862,7 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
 			<div id="grid" class="grid"></div>
 			<div id="empty" class="empty">No providers match this filter.</div>
 			<div class="security">
-				<span aria-hidden="true">◇</span>
+				<span aria-hidden="true">◆</span>
 				<div>
 					<strong>Secrets stay in the credential vault</strong>
 					<p>API keys use BatikCode SecretStorage. OAuth bootstrap sessions stay inside each official client and BatikCode never copies their tokens.</p>

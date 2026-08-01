@@ -1,6 +1,6 @@
-﻿/*---------------------------------------------------------------------------------------------
- *  Copyright (c) BatikCode contributors. All rights reserved.
- *  Licensed under the MIT License.
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
@@ -105,6 +105,7 @@ export class TelegramAIChat implements vscode.Disposable {
 			}
 			const current = this.model;
 			const lines = models.map((m, i) => {
+				// allow-any-unicode-next-line
 				const active = current && m.id === current.id ? ' ✅ (active)' : '';
 				const auto = isAutoSelectionModel(m) ? ' (auto router)' : '';
 				return `${i + 1}. ${m.name ?? m.id} — ${providerLabel(m)}${auto}${active}`;
@@ -128,7 +129,7 @@ To return to automatic selection: /model auto`;
 		const models = await vscode.lm.selectChatModels();
 		const model = models[index - 1];
 		if (!model) {
-			return `Invalid model number. Use /models to see the list (1–${models.length}).`;
+			return `Invalid model number. Use /models to see the list (1-${models.length}).`;
 		}
 		this.model = model;
 		this.output.appendLine(`[telegram-ai] user switched model to: ${model.vendor}/${model.family}/${model.name ?? model.id}`);

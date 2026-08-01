@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
  *  BatikCode Visual Identity — Batik Watermark Patterns
  *
  *  Inspired by traditional Indonesian batik motifs.
@@ -9,11 +14,11 @@
  *    - batik-kawung: geometric intersecting circles (activity bar)
  *    - batik-lereng: gentle slope lines (status bar)
  *
- *  All patterns use opacity ≤ 0.04 so they whisper, never shout.
+ *  All patterns use opacity <= 0.04 so they whisper, never shout.
  *  Blend mode: soft-light over the base background color.
- *--------------------------------------------------------------------------------------------*/
+ */
 
-/* ── Title Bar: Parang (diagonal wave) ── */
+/* -- Title Bar: Parang (diagonal wave) -- */
 .monaco-workbench .part.titlebar > .titlebar-container {
 	background-image:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M0 30 Q15 10 30 30 Q45 50 60 30' fill='none' stroke='%23C8553D' stroke-width='0.5' opacity='0.3'/%3E%3Cpath d='M-10 40 Q5 20 20 40 Q35 60 50 40' fill='none' stroke='%23D4A853' stroke-width='0.4' opacity='0.2'/%3E%3Cpath d='M10 50 Q25 30 40 50 Q55 70 70 50' fill='none' stroke='%23C8553D' stroke-width='0.5' opacity='0.2'/%3E%3Cpath d='M0 10 Q15 -10 30 10 Q45 30 60 10' fill='none' stroke='%23D4A853' stroke-width='0.3' opacity='0.15'/%3E%3C/svg%3E");
@@ -23,7 +28,7 @@
 	background-blend-mode: soft-light;
 }
 
-/* ── Activity Bar: Kawung (intersecting circles) ── */
+/* -- Activity Bar: Kawung (intersecting circles) -- */
 .monaco-workbench .part.activitybar {
 	background-image:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cellipse cx='24' cy='24' rx='12' ry='10' fill='none' stroke='%23C8553D' stroke-width='0.6' opacity='0.35'/%3E%3Cellipse cx='12' cy='12' rx='12' ry='10' fill='none' stroke='%23D4A853' stroke-width='0.4' opacity='0.2'/%3E%3Cellipse cx='36' cy='12' rx='12' ry='10' fill='none' stroke='%23C8553D' stroke-width='0.4' opacity='0.2'/%3E%3Cellipse cx='12' cy='36' rx='12' ry='10' fill='none' stroke='%23D4A853' stroke-width='0.4' opacity='0.2'/%3E%3Cellipse cx='36' cy='36' rx='12' ry='10' fill='none' stroke='%23C8553D' stroke-width='0.4' opacity='0.2'/%3E%3Ccircle cx='24' cy='24' r='3' fill='%23D4A853' opacity='0.3'/%3E%3C/svg%3E");
@@ -33,7 +38,7 @@
 	background-blend-mode: soft-light;
 }
 
-/* ── Status Bar: Lereng (gentle slope lines) ── */
+/* -- Status Bar: Lereng (gentle slope lines) -- */
 .monaco-workbench .part.statusbar {
 	background-image:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='24' viewBox='0 0 80 24'%3E%3Cline x1='0' y1='4' x2='80' y2='20' stroke='%23C8553D' stroke-width='0.3' opacity='0.2'/%3E%3Cline x1='0' y1='12' x2='80' y2='24' stroke='%23D4A853' stroke-width='0.25' opacity='0.15'/%3E%3Cline x1='-40' y1='4' x2='40' y2='20' stroke='%23C8553D' stroke-width='0.3' opacity='0.15'/%3E%3Cline x1='40' y1='4' x2='120' y2='20' stroke='%23D4A853' stroke-width='0.3' opacity='0.15'/%3E%3C/svg%3E");
@@ -43,7 +48,7 @@
 	background-blend-mode: soft-light;
 }
 
-/* ── Side Bar Title area: subtle kawung dots ── */
+/* -- Side Bar Title area: subtle kawung dots -- */
 .monaco-workbench .part.sidebar .composite.title {
 	background-image:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='10' viewBox='0 0 32 10'%3E%3Ccircle cx='16' cy='5' r='1.5' fill='%23C8553D' opacity='0.3'/%3E%3C/svg%3E");

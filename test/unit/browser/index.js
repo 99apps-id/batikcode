@@ -189,11 +189,17 @@ async function createServer() {
 		});
 		try {
 			const result = await fn(...params);
+			// fs.promises.writeFile/mkdir/unlink resolve with `undefined`, and
+			// `JSON.stringify(undefined)` returns the *value* `undefined` rather
+			// than a string, so `response.end(undefined)` sent an empty body.
+			// The client always does `res.json()`, which then threw "Unexpected
+			// end of JSON input" — masking the real result (and, for snapshot
+			// writes, breaking snapshot creation/update entirely).
 			response.writeHead(200, { 'Content-Type': 'application/json' });
-			response.end(JSON.stringify(result));
+			response.end(JSON.stringify(result === undefined ? null : result));
 		} catch (err) {
-			response.writeHead(500);
-			response.end(err.message);
+			response.writeHead(500, { 'Content-Type': 'application/json' });
+			response.end(JSON.stringify(err.message));
 		}
 	};
 

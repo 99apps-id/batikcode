@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Deliberately no `lfs: true`. Everything under LFS here is copilot
           # simulation-test cache, which the server package excludes anyway —

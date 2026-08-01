@@ -17,6 +17,9 @@ build/builtin/main.js
 build/npm/stubs/sharp/index.js
 build/codex/generate-protocol.mjs
 eslint.config.js
+extensions/batikcode-remote-ssh/.github/scripts/get-changelog.js
+extensions/batikcode-remote-ssh/eslint.config.mjs
+extensions/batikcode-remote-ssh/webpack.config.js
 extensions/copilot/.mocha-multi-reporters.js
 extensions/copilot/.mocharc.js
 extensions/copilot/.vscode-test.mjs

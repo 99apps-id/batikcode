@@ -342,18 +342,15 @@ export class AgentHostTerminalService extends Disposable implements IAgentHostTe
 		const store = new DisposableStore();
 		const commandSource = store.add(new AhpTerminalCommandSource());
 
+		let pty: AgentHostPty | undefined;
 		const instancePromise = Promise.resolve().then(() => this._terminalService.createTerminal({
 			config: {
 				customPtyImplementation: (id, cols, rows) => {
-					const pty = new AgentHostPty(id, connection, terminalUri, {
+					pty = new AgentHostPty(id, connection, terminalUri, {
 						attachOnly: true,
 					});
 					if (cols > 0 && rows > 0) {
 						pty.resize(cols, rows);
-					}
-
-					if (!store.isDisposed) {
-						commandSource.connect(instance, pty);
 					}
 
 					this._activePtys.set(key, { pty, clientId: connection.clientId });
@@ -371,6 +368,13 @@ export class AgentHostTerminalService extends Disposable implements IAgentHostTe
 		} catch (error) {
 			store.dispose();
 			throw error;
+		}
+		// Wire the command source up now that both the instance and its pty are
+		// available. This must happen after `instance` resolves — the pty is
+		// constructed synchronously inside `customPtyImplementation`, before
+		// `createTerminal()` returns the instance.
+		if (!store.isDisposed && pty) {
+			commandSource.connect(instance, pty);
 		}
 		this._terminalChatService.registerTerminalInstanceWithToolSession(terminalToolSessionId, instance);
 

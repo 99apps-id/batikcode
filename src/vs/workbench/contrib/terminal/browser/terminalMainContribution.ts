@@ -156,8 +156,15 @@ export class TerminalMainContribution extends Disposable implements IWorkbenchCo
 		// appears, which is exactly the hang this replaces.
 		lifecycleService.when(LifecyclePhase.Eventually).then(async () => {
 			try {
-				const terminal = terminalService.activeInstance
-					?? terminalService.instances[0]
+				// A tab restored from a crashed session can come back as an instance
+				// with no process behind it (processId === undefined). Picking such a
+				// husk would show an empty panel and never start the pty host, so only
+				// reuse an instance that actually has a live process and create a
+				// fresh one otherwise.
+				const liveInstance = terminalService.activeInstance?.processId !== undefined
+					? terminalService.activeInstance
+					: terminalService.instances.find(instance => instance.processId !== undefined);
+				const terminal = liveInstance
 					?? await terminalService.createTerminal({ location: TerminalLocation.Panel });
 				terminalService.setActiveInstance(terminal);
 				await terminalGroupService.showPanel(false);

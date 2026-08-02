@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as tar from 'tar';
+import { fileURLToPath } from 'url';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { CancellationError } from '../../../base/common/errors.js';
@@ -22,6 +23,47 @@ import { ILogService } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IRequestService } from '../../request/common/request.js';
 import { IRequestContext } from '../../../base/parts/request/common/request.js';
+
+/**
+ * Maps agent-SDK package ids to their npm package names so the downloader
+ * can resolve a locally installed / bundled SDK from `node_modules`. In
+ * source builds the SDK is a devDependency of this repo; BatikCode also
+ * ships the SDK bundled into built products so the Claude agent works
+ * without a CDN.
+ */
+const BUNDLED_SDK_NPM_NAMES: Readonly<Record<string, string>> = {
+	claude: '@anthropic-ai/claude-agent-sdk',
+	codex: '@openai/codex',
+};
+
+/**
+ * Resolves the `package.json` path of an SDK that ships in a local
+ * `node_modules` by walking up from this module's location. Returns
+ * `undefined` when the SDK isn't installed. Cheap and synchronous — no
+ * `node:` specifier imports, so it is safe in every loader context.
+ */
+function resolveBundledSdkPackageJson(pkg: IAgentSdkPackage): string | undefined {
+	const npmName = BUNDLED_SDK_NPM_NAMES[pkg.id];
+	if (!npmName) {
+		return undefined;
+	}
+	let dir = path.dirname(fileURLToPath(import.meta.url));
+	for (;;) {
+		try {
+			const candidate = path.join(dir, 'node_modules', npmName, 'package.json');
+			if (fs.statSync(candidate).isFile()) {
+				return candidate;
+			}
+		} catch {
+			// keep walking up
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) {
+			return undefined;
+		}
+		dir = parent;
+	}
+}
 
 // #region Per-package strategy
 
@@ -180,10 +222,18 @@ export interface IAgentSdkDownloader {
 	 * Cheap, synchronous gate used at startup to decide whether to register
 	 * the corresponding agent provider. True iff the dev override is set, OR
 	 * (`product.agentSdks?.[pkg.id]` is populated AND `pkg.currentSdkTarget()`
-	 * resolves — i.e. an SDK exists for this host). Does NOT trigger a
-	 * download.
+	 * resolves — i.e. an SDK exists for this host), OR the SDK ships in a
+	 * local `node_modules` (BatikCode bundles it into built products; in
+	 * source builds it is a devDependency). Does NOT trigger a download.
 	 */
 	isAvailable(pkg: IAgentSdkPackage): boolean;
+
+	/**
+	 * True iff the SDK resolves from a local `node_modules` rather than a
+	 * product-configured CDN download. Used to decide whether the agent can
+	 * load without a network round-trip even when no download cache exists.
+	 */
+	isSdkBundledLocally(pkg: IAgentSdkPackage): boolean;
 
 	/**
 	 * True iff {@link loadSdkRoot} would resolve WITHOUT a network download —
@@ -270,11 +320,22 @@ export class AgentSdkDownloader extends Disposable implements IAgentSdkDownloade
 		if (process.env[pkg.devOverrideEnvVar]) {
 			return true;
 		}
-		return !!this._productService.agentSdks?.[pkg.id] && resolveSdkTarget(pkg) !== undefined;
+		const configured = !!this._productService.agentSdks?.[pkg.id] && resolveSdkTarget(pkg) !== undefined;
+		if (configured) {
+			return true;
+		}
+		return this.isSdkBundledLocally(pkg);
+	}
+
+	isSdkBundledLocally(pkg: IAgentSdkPackage): boolean {
+		return resolveBundledSdkPackageJson(pkg) !== undefined;
 	}
 
 	async isSdkResolvableWithoutDownload(pkg: IAgentSdkPackage): Promise<boolean> {
 		if (process.env[pkg.devOverrideEnvVar]) {
+			return true;
+		}
+		if (this.isSdkBundledLocally(pkg)) {
 			return true;
 		}
 		const config = this._productService.agentSdks?.[pkg.id];

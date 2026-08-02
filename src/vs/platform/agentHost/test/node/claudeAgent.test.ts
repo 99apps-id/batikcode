@@ -864,6 +864,7 @@ function stubAgentSdkDownloader(): IAgentSdkDownloader {
 		_serviceBrand: undefined,
 		onDidDownloadProgress: Event.None,
 		isAvailable: () => false,
+		isSdkBundledLocally: () => false,
 		isSdkResolvableWithoutDownload: async () => false,
 		loadSdkRoot: () => { throw new Error('test stub: downloader.loadSdkRoot should not be called'); },
 	};

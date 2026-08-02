@@ -248,8 +248,19 @@ suite('AgentSdkDownloader', () => {
 		));
 	}
 
-	test('isAvailable: false when no env override and no product config', () => {
-		assert.strictEqual(makeDownloader(null).isAvailable(ClaudeSdkPackage), false);
+	/**
+	 * A package id with no bundled npm name and no product config — exercises
+	 * the "not local / not configured" branch of `isAvailable`.
+	 */
+	const UnknownSdkPackage: IAgentSdkPackage = {
+		id: 'no-such-sdk',
+		displayName: 'No Such SDK',
+		devOverrideEnvVar: 'VSCODE_AGENT_HOST_NO_SUCH_SDK_ROOT',
+		hasSeparateMuslLinuxPackage: false,
+	};
+
+	test('isAvailable: false when no env override, no product config, and no local SDK', () => {
+		assert.strictEqual(makeDownloader(null).isAvailable(UnknownSdkPackage), false);
 	});
 
 	test('isAvailable: true when env override set', () => {
@@ -259,6 +270,16 @@ suite('AgentSdkDownloader', () => {
 
 	test('isAvailable: true when product config populated and host has a target', () => {
 		assert.strictEqual(makeDownloader().isAvailable(ClaudeSdkPackage), true);
+	});
+
+	test('isAvailable: true when SDK is bundled in local node_modules without product config', () => {
+		assert.strictEqual(makeDownloader(null).isAvailable(ClaudeSdkPackage), true);
+	});
+
+	test('isSdkBundledLocally: true for the bundled Claude SDK, false for unknown packages', () => {
+		const downloader = makeDownloader(null);
+		assert.strictEqual(downloader.isSdkBundledLocally(ClaudeSdkPackage), true);
+		assert.strictEqual(downloader.isSdkBundledLocally(UnknownSdkPackage), false);
 	});
 
 	test('loadSdkRoot: dev override returns the path unchanged', async () => {

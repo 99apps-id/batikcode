@@ -377,11 +377,46 @@ function isLoopbackHost(host: string): boolean {
 
 async function resolveCloudflaredExecutable(): Promise<string> {
 	const configured = vscode.workspace.getConfiguration('batikcode.devTunnel').get<string>(CLOUDFLARED_PATH_SETTING)?.trim();
-	if (!configured) {
-		return 'cloudflared';
+	if (configured) {
+		await validateCloudflaredExecutable(configured);
+		return configured;
 	}
-	await validateCloudflaredExecutable(configured);
-	return configured;
+	const discovered = await discoverCloudflaredExecutable();
+	if (discovered) {
+		return discovered;
+	}
+	return 'cloudflared';
+}
+
+/**
+ * Looks for a cloudflared binary in the usual install locations when it is not
+ * on PATH. The configured setting still wins; this only removes the need to
+ * configure the path manually for common setups (scoop, Program Files,
+ * per-user installs).
+ */
+async function discoverCloudflaredExecutable(): Promise<string | undefined> {
+	const candidates = process.platform === 'win32'
+		? [
+			path.join(process.env.USERPROFILE ?? '', 'scoop', 'shims', 'cloudflared.exe'),
+			path.join(process.env.USERPROFILE ?? '', 'scoop', 'apps', 'cloudflared', 'current', 'cloudflared.exe'),
+			path.join(process.env.ProgramFiles ?? '', 'cloudflared', 'cloudflared.exe'),
+			path.join(process.env.LOCALAPPDATA ?? '', 'cloudflared', 'cloudflared.exe'),
+			path.join(process.env.USERPROFILE ?? '', '.cloudflared', 'cloudflared.exe')
+		]
+		: [
+			'/usr/local/bin/cloudflared',
+			'/usr/bin/cloudflared',
+			path.join(process.env.HOME ?? '', '.cloudflared', 'cloudflared')
+		];
+	for (const candidate of candidates) {
+		try {
+			await access(candidate);
+			return candidate;
+		} catch {
+			// Keep looking.
+		}
+	}
+	return undefined;
 }
 
 async function validateCloudflaredExecutable(value: string): Promise<void> {

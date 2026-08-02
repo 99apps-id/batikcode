@@ -25,9 +25,12 @@ interface TunnelSpec {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	if (vscode.env.remoteAuthority) {
-		return;
-	}
+	// Deliberately NOT gated on `vscode.env.remoteAuthority`: in remote SSH
+	// windows this extension runs in the remote extension host, so the
+	// `batikcode.devTunnel.start` command publishes a port that lives on the
+	// remote server (where the dev service is actually running) to a public
+	// trycloudflare.com URL. The remote SSH resolver only exposes ports as
+	// `localhost:<port>` locally; users want a real Cloudflare domain instead.
 
 	const logger = new Logger(vscode.l10n.t('BatikCode Cloudflare Dev Tunnel'));
 	const provider = new CloudflareQuickTunnelProvider(context, logger);
@@ -40,7 +43,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('batikcode.devTunnel.stopAll', () => provider.stopAll()),
 		vscode.commands.registerCommand('batikcode.devTunnel.selectCloudflared', () => selectCloudflaredBinary()),
 		vscode.commands.registerCommand('batikcode.devTunnel.openDownload', () => vscode.env.openExternal(CLOUDFLARED_DOWNLOAD_URL)),
-		await vscode.workspace.registerTunnelProvider(provider, {
+	);
+
+	// Register as the tunnel provider. In a remote window another tunnel
+	// provider may already own the single provider slot; that's fine — the
+	// commands above still publish ports to Cloudflare independently.
+	try {
+		context.subscriptions.push(await vscode.workspace.registerTunnelProvider(provider, {
 			tunnelFeatures: {
 				elevation: false,
 				protocol: true,
@@ -52,8 +61,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					}
 				]
 			}
-		})
-	);
+		}));
+	} catch (error) {
+		logger.info(vscode.l10n.t('Tunnel provider slot is taken by another provider; commands remain available. ({0})', error instanceof Error ? error.message : String(error)));
+	}
 }
 
 export function deactivate(): void { }

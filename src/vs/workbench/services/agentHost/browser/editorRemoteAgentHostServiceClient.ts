@@ -27,7 +27,7 @@ import type { IRemoteWatchHandle } from '../../../../platform/agentHost/common/a
 import type { CreateResourceWatchParams, CreateResourceWatchResult, ResourceCopyParams, ResourceCopyResult, ResourceDeleteParams, ResourceDeleteResult, ResourceListResult, ResourceMkdirParams, ResourceMkdirResult, ResourceMoveParams, ResourceMoveResult, ResourceReadResult, ResourceResolveParams, ResourceResolveResult, ResourceWriteParams, ResourceWriteResult } from '../../../../platform/agentHost/common/state/sessionProtocol.js';
 import { ComponentToState, RootState, StateComponents } from '../../../../platform/agentHost/common/state/sessionState.js';
 import type { InitializeResult } from '../../../../platform/agentHost/common/state/protocol/common/commands.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
+import { IRemoteAgentConnection, IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 
 const REMOTE_NOT_SUPPORTED = (op: string) => new Error(`${op} is not supported when the agent host runs on a remote.`);
 const LOG_PREFIX = '[AgentHost:remote]';
@@ -98,17 +98,23 @@ export class EditorRemoteAgentHostServiceClient extends Disposable implements IA
 			this._onAgentHostExit.fire(0);
 		}));
 
-		// Kick off the connect in the background. Failures are logged; callers
-		// that need a connected client (e.g. session creation) will see the
-		// failure surface as a rejected promise from the protocol client.
-		this._connect().catch(err => this._logService.warn(`${LOG_PREFIX} Connect failed`, err));
+		// Kick off the connect in the background. The management connection must
+		// finish resolving first: Remote SSH installation/forwarding can take
+		// longer than the AHP handshake timeout, and starting both concurrently
+		// permanently closed the client before the remote channel was available.
+		this._connect(connection).catch(err => this._logService.warn(`${LOG_PREFIX} Connect failed`, err));
 	}
 
-	private async _connect(): Promise<void> {
+	private async _connect(connection: IRemoteAgentConnection): Promise<void> {
 		if (this._connectStarted || !this._protocolClient) {
 			return;
 		}
 		this._connectStarted = true;
+		this._logService.info(`${LOG_PREFIX} Waiting for the remote management connection...`);
+		await connection.getInitialConnectionTimeMs();
+		if (this._store.isDisposed) {
+			return;
+		}
 		this._logService.info(`${LOG_PREFIX} Connecting to remote agent host...`);
 		await this._protocolClient.connect();
 		this._logService.info(`${LOG_PREFIX} Connected; clientId=${this._protocolClient.clientId}`);

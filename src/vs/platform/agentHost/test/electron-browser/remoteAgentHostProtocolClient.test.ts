@@ -363,12 +363,28 @@ suite('RemoteAgentHostProtocolClient', () => {
 		assert.strictEqual(transport.sentMessages.length, 0);
 	});
 
+	test('liveness does not start before the initial handshake', async () => {
+		return runWithFakedTimers({ useFakeTimers: true, maxTaskCount: 10_000 }, async () => {
+			const lowLoad = { hasHighLoad: () => false };
+			const { client, transport } = createClient(undefined, undefined, lowLoad);
+			let closeCount = 0;
+			disposables.add(client.onDidClose(() => closeCount++));
+
+			await timeout(30_000);
+
+			assert.strictEqual(transport.sentMessages.length, 0);
+			assert.strictEqual(closeCount, 0);
+			client.dispose();
+		});
+	});
+
 	test('liveness sends a ping when idle and force-closes after the ping ages out', async () => {
 		return runWithFakedTimers({ useFakeTimers: true, maxTaskCount: 10_000 }, async () => {
 			const lowLoad = { hasHighLoad: () => false };
 			const { client, transport } = createClient(undefined, undefined, lowLoad);
 			let closeCount = 0;
 			disposables.add(client.onDidClose(() => closeCount++));
+			await connectClient(client, transport);
 
 			// First idle tick (t=5s) sends a ping; that ping then ages out
 			// over the next ~20s and triggers a close at ~t=25s.
@@ -387,6 +403,7 @@ suite('RemoteAgentHostProtocolClient', () => {
 			const { client, transport } = createClient(undefined, undefined, lowLoad);
 			let closeCount = 0;
 			disposables.add(client.onDidClose(() => closeCount++));
+			await connectClient(client, transport);
 
 			// Auto-respond to every outgoing ping.
 			let answered = 0;
@@ -411,9 +428,10 @@ suite('RemoteAgentHostProtocolClient', () => {
 	test('liveness is suppressed while local load is high', async () => {
 		return runWithFakedTimers({ useFakeTimers: true, maxTaskCount: 10_000 }, async () => {
 			const highLoad = { hasHighLoad: () => true };
-			const { client } = createClient(undefined, undefined, highLoad);
+			const { client, transport } = createClient(undefined, undefined, highLoad);
 			let closeCount = 0;
 			disposables.add(client.onDidClose(() => closeCount++));
+			await connectClient(client, transport);
 
 			// 60s of silence — would normally trigger the timeout — but
 			// high local load means we attribute the silence to ourselves
@@ -431,6 +449,7 @@ suite('RemoteAgentHostProtocolClient', () => {
 			const { client, transport } = createClient(undefined, undefined, lowLoad);
 			let closeCount = 0;
 			disposables.add(client.onDidClose(() => closeCount++));
+			await connectClient(client, transport);
 
 			// Wait for the first force-close.
 			await timeout(30_000);
@@ -449,9 +468,11 @@ suite('RemoteAgentHostProtocolClient', () => {
 
 	test('inbound messages are dropped after close', async () => {
 		return runWithFakedTimers({ useFakeTimers: true, maxTaskCount: 10_000 }, async () => {
-			const { client, transport } = createClient();
+			const lowLoad = { hasHighLoad: () => false };
+			const { client, transport } = createClient(undefined, undefined, lowLoad);
 			let actionCount = 0;
 			disposables.add(client.onDidAction(() => actionCount++));
+			await connectClient(client, transport);
 
 			// Issue a request, then force close via the watchdog timeout.
 			const pending = client.resourceList(URI.file('/workspace'));
@@ -467,7 +488,7 @@ suite('RemoteAgentHostProtocolClient', () => {
 			// processed the response it would log a "unknown request id"
 			// warning at best, or settle a request the caller no longer
 			// owns at worst. Either way, after close it must be a no-op.
-			transport.fireMessage({ jsonrpc: '2.0', id: 1, result: { entries: [] } });
+			transport.fireMessage({ jsonrpc: '2.0', id: 2, result: { entries: [] } });
 
 			// Late notification — must not fan out as an action event.
 			const lateAction: SessionActiveClientRemovedAction = {

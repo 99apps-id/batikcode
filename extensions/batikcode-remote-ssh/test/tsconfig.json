@@ -4,9 +4,29 @@
 		/* Basic Options */
 		"outDir": "../.test",
 		"rootDir": "..",								/* Specify the root directory of input files. */
-		"module": "node20",
+		"module": "esnext",
+		"moduleResolution": "bundler",
 
 		/* Source Map Options */
 		"sourceMap": true,								/* Create source map files for emitted JavaScript files. */
+		/* Skip type-checking third-party .d.ts files (e.g. @zokugun/fs-extra-plus
+		   is incompatible with TypeScript 6.x); source files are still checked. */
+		"skipLibCheck": true
 	},
+	/* The parent tsconfig excludes "test"; this config lives inside test/,
+	   so override exclude to avoid excluding its own inputs. */
+	"exclude": [
+		"../node_modules",
+		"../.test",
+		"../.vscode-test",
+		"../vitest.config.ts"
+	],
+	/* Pull in the extension's vscode.d.ts so 'vscode' resolves; the parent
+	   config auto-includes them from the extension root. */
+	"include": [
+		"**/*",
+		"../vscode.d.ts",
+		"../vscode.proposed.contribViewsRemote.d.ts",
+		"../vscode.proposed.resolvers.d.ts"
+	]
 }

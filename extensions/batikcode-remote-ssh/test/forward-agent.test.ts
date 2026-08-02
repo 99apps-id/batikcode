@@ -5,7 +5,7 @@ import { vol } from 'memfs';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import SSHConnection from '../src/ssh/sshConnection';
 import { RemoteSSHResolver, getRemoteAuthority } from './rewires/remote';
-import { Log } from './mocks/logger';
+import { Log } from '../src/common/logger';
 import * as vscode from './mocks/vscode';
 import { runDocker } from './utils/run-docker';
 import { getMappedPort } from './utils/get-mapped-port';
@@ -93,14 +93,14 @@ it('forwards the agent through a socket that stays alive', async () => {
   vscode.window.setPassword(PASSWORD);
 
   const logger = new Log('Remote - SSH');
-  const extContext = new vscode.ExtensionContext();
+  const extContext = new vscode.ExtensionContext() as unknown as import('vscode').ExtensionContext;
   const remoteSSHResolver = new RemoteSSHResolver(extContext, logger);
   const remoteContext = new vscode.RemoteAuthorityResolverContext();
   const authority = getRemoteAuthority('test');
   const result = await remoteSSHResolver.resolve(authority, remoteContext);
 
   expect(result).toBeDefined();
-  expect(result.host).to.eql('127.0.0.1');
+  expect((result as unknown as { host: string }).host).to.eql('127.0.0.1');
 
   const remoteAuthSock = result.extensionHostEnv?.SSH_AUTH_SOCK;
   expect(remoteAuthSock, 'SSH_AUTH_SOCK should be exported to the extension host').toBeTypeOf('string');

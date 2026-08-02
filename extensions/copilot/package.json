@@ -1725,6 +1725,26 @@
             ]
           }
         ]
+      },
+      {
+        "id": "claude-code",
+        "name": "claude",
+        "fullName": "Claude",
+        "description": "%github.copilot.session.providerDescription.claude%",
+        "when": "config.github.copilot.chat.claudeAgent.enabled && ((isSessionsWindow && !config.chat.agents.claude.preferAgentHost) || (!isSessionsWindow && !config.chat.editor.claude.preferAgentHost))",
+        "locations": [
+          "panel"
+        ],
+        "commands": [
+          {
+            "name": "init",
+            "description": "Initialize a new CLAUDE.md file with codebase documentation"
+          },
+          {
+            "name": "compact",
+            "description": "Compact the conversation history to save context tokens"
+          }
+        ]
       }
     ],
     "languageModelChatProviders": [

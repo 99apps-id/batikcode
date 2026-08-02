@@ -13,7 +13,7 @@
 	"serverLicensePrompt": "",
 	"serverApplicationName": "batikcode-server",
 	"serverDataFolderName": ".batikcode-server",
-	"serverDownloadUrlTemplate": "https://github.com/99apps-id/batikcode/releases/download/v${version}/batikcode-server-${os}-${arch}.tar.gz",
+	"serverDownloadUrlTemplate": "",
 	"tunnelApplicationName": "batikcode-tunnel",
 	"win32DirName": "BatikCode",
 	"win32NameVersion": "BatikCode IDE",
@@ -189,14 +189,23 @@
 		{
 			"id": "batikcode-dark",
 			"label": "BatikCode Dark",
-			"themeId": "BatikCode Dark",
-			"type": "dark"
-		},
-		{
-			"id": "batikcode-light",
-			"label": "BatikCode Light",
-			"themeId": "BatikCode Light",
-			"type": "light"
+			"themeId": "Default Dark+",
+			"type": "dark",
+			"colorOverrides": {
+				"activityBar.activeBorder": "#C8553D",
+				"activityBar.foreground": "#D4A853",
+				"activityBarBadge.background": "#C8553D",
+				"titleBar.activeBackground": "#1A1410",
+				"statusBar.background": "#1A1410",
+				"statusBar.foreground": "#D4A853",
+				"statusBarItem.remoteBackground": "#C8553D",
+				"focusBorder": "#C8553D80",
+				"contrastActiveBorder": "#C8553D",
+				"tab.activeBorderTop": "#C8553D",
+				"progressBar.background": "#C8553D",
+				"badge.background": "#C8553D",
+				"notificationCenter.border": "#C8553D40"
+			}
 		},
 		{
 			"id": "dark-2026",
@@ -238,7 +247,7 @@
 	"builtInExtensionsEnabledWithAutoUpdates": [],
 	"sessionsWindowAllowedExtensions": [],
 	"defaultSettings": {
-		"workbench.colorTheme": "BatikCode Dark",
+		"workbench.colorTheme": "Default Dark+",
 		"workbench.activityBar.location": "default",
 		"editor.fontFamily": "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
 		"telemetry.telemetryLevel": "off",

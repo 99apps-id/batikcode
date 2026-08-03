@@ -70,6 +70,12 @@ async function npmInstallAsync(dir: string, opts?: child_process.SpawnOptions): 
 	finalOpts.env['GIT_CONFIG_KEY_1'] = 'url.https://github.com/.insteadof';
 	finalOpts.env['GIT_CONFIG_VALUE_1'] = 'git@github.com:';
 
+	// Some git dependencies run `npx <pkg>` in their `prepare` script
+	// (e.g. simple-socks -> `npx browserslist@latest --update-db`). On CI
+	// runners stdin is closed, so npx's "Ok to proceed?" confirmation reads EOF
+	// and the install hangs, then dies with a silent exit 1. Auto-confirm.
+	finalOpts.env['npm_config_yes'] = 'true';
+
 	const command = process.env['npm_command'] || 'install';
 
 	if (process.env['VSCODE_REMOTE_DEPENDENCIES_CONTAINER_NAME'] && /^(.build\/distro\/npm\/)?remote$/.test(dir)) {

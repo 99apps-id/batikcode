@@ -1033,6 +1033,14 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 
 				const pathsToOpen = await Promise.all(lastSessionWindows.map(async lastSessionWindow => {
 
+					// BatikCode: always start local by default. Remote windows (e.g. SSH)
+					// are never restored automatically — they require an explicit
+					// connection from the Remote Explorer / SSH Targets view, so the app
+					// does not reconnect to a remote host on startup.
+					if (lastSessionWindow.remoteAuthority) {
+						return undefined;
+					}
+
 					// Workspaces
 					if (lastSessionWindow.workspace) {
 						const pathToOpen = await this.resolveOpenable({ workspaceUri: lastSessionWindow.workspace.configPath }, { remoteAuthority: lastSessionWindow.remoteAuthority, rejectTransientWorkspaces: true /* https://github.com/microsoft/vscode/issues/119695 */ });

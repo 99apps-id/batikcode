@@ -19,7 +19,7 @@ import { TestExtensionService } from '../../../../test/common/workbenchTestServi
 import { HasByokModelsContribution } from '../../browser/hasByokModelsContribution.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { ChatConfiguration } from '../../common/constants.js';
-import { COPILOT_VENDOR_ID } from '../../common/languageModels.js';
+import { COPILOT_VENDOR_ID, ILanguageModelsService } from '../../common/languageModels.js';
 import { ILanguageModelsConfigurationService, ILanguageModelsProviderGroup } from '../../common/languageModelsConfiguration.js';
 
 suite('HasByokModelsContribution', () => {
@@ -90,6 +90,16 @@ suite('HasByokModelsContribution', () => {
 		readonly clientByokEnabled: IContextKey<boolean>;
 	}
 
+	class FakeLanguageModelsService {
+		_serviceBrand: undefined;
+		readonly onDidChangeLanguageModelVendors = new Emitter<readonly string[]>().event;
+		private readonly _onDidChangeLanguageModels = new Emitter<string>();
+		readonly onDidChangeLanguageModels = this._onDidChangeLanguageModels.event;
+
+		getVendors(): { vendor: string }[] { return []; }
+		getLanguageModelGroups(): { modelIdentifiers: string[] }[] { return []; }
+	}
+
 	function createScenario(store: DisposableStore, options: IScenarioOptions = {}): IScenario {
 		const configurationService = new TestConfigurationService();
 		configurationService.setUserConfiguration(ChatConfiguration.AIDisabled, options.configuration?.aiDisabled ?? false);
@@ -118,6 +128,7 @@ suite('HasByokModelsContribution', () => {
 		instantiation.stub(IContextKeyService, contextKeyService);
 		instantiation.stub(IConfigurationService, configurationService);
 		instantiation.stub(ILanguageModelsConfigurationService, configService as unknown as ILanguageModelsConfigurationService);
+		instantiation.stub(ILanguageModelsService, new FakeLanguageModelsService() as unknown as ILanguageModelsService);
 
 		const hasByokModels = ChatEntitlementContextKeys.hasByokModels.bindTo(contextKeyService);
 		store.add(instantiation.createInstance(HasByokModelsContribution));

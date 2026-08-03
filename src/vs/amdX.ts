@@ -5,6 +5,7 @@
 
 import { AppResourcePath, FileAccess, nodeModulesAsarPath, nodeModulesPath, Schemas, VSCODE_AUTHORITY } from './base/common/network.js';
 import * as platform from './base/common/platform.js';
+import { env } from './base/common/process.js';
 import { IProductConfiguration } from './base/common/product.js';
 import { URI } from './base/common/uri.js';
 import { generateUuid } from './base/common/uuid.js';
@@ -202,6 +203,19 @@ class AMDModuleImporter {
 const cache = new Map<string, Promise<any>>();
 
 /**
+ * Whether the app's `node_modules` are packaged into a `node_modules.asar` archive.
+ *
+ * In dev mode (`VSCODE_DEV` is set) the app's `node_modules` are never packed into an
+ * archive, so ASAR must not be used. This is important for forks that set a `product.commit`
+ * marker in dev builds too: the commit marker alone would otherwise make the renderer believe
+ * it runs a built product and resolve node modules against a `node_modules.asar` that does not
+ * exist, breaking every `importAMDNodeModule` consumer (xterm, vscode-textmate, etc.).
+ */
+function isNodeModulesAsarAvailable(): boolean {
+	return !env['VSCODE_DEV'];
+}
+
+/**
  * Utility for importing an AMD node module. This util supports AMD and ESM contexts and should be used while the ESM adoption
  * is on its way.
  *
@@ -210,7 +224,7 @@ const cache = new Map<string, Promise<any>>();
 export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideNodeModule: string, isBuilt?: boolean): Promise<T> {
 	if (isBuilt === undefined) {
 		const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
-		isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit);
+		isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit) && isNodeModulesAsarAvailable();
 	}
 
 	const nodeModulePath = pathInsideNodeModule ? `${nodeModuleName}/${pathInsideNodeModule}` : nodeModuleName;
@@ -218,6 +232,7 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 		return cache.get(nodeModulePath)!;
 	}
 	let scriptSrc: string;
+	let fallbackScriptSrc: string | undefined;
 	if (/^\w[\w\d+.-]*:\/\//.test(nodeModulePath)) {
 		// looks like a URL
 		// bit of a special case for: src/vs/workbench/services/languageDetection/browser/languageDetectionWebWorker.ts
@@ -227,15 +242,25 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 		const actualNodeModulesPath = (useASAR ? nodeModulesAsarPath : nodeModulesPath);
 		const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
 		scriptSrc = FileAccess.asBrowserUri(resourcePath).toString(true);
+		if (useASAR) {
+			// The `node_modules.asar` archive does not exist in dev builds. Dev detection
+			// (`VSCODE_DEV` in the process env) can be invisible in web workers, so guard
+			// against a wrong ASAR guess by falling back to the plain `node_modules` path.
+			const fallbackPath: AppResourcePath = `${nodeModulesPath}/${nodeModulePath}`;
+			fallbackScriptSrc = FileAccess.asBrowserUri(fallbackPath).toString(true);
+		}
 	}
-	const result = AMDModuleImporter.INSTANCE.load<T>(scriptSrc);
+	let result = AMDModuleImporter.INSTANCE.load<T>(scriptSrc);
+	if (fallbackScriptSrc) {
+		result = result.catch(() => AMDModuleImporter.INSTANCE.load<T>(fallbackScriptSrc!));
+	}
 	cache.set(nodeModulePath, result);
 	return result;
 }
 
 export function resolveAmdNodeModulePath(nodeModuleName: string, pathInsideNodeModule: string): string {
 	const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
-	const isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit);
+	const isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit) && isNodeModulesAsarAvailable();
 	const useASAR = (isBuilt && (platform.isElectron || (platform.isWebWorker && platform.hasElectronUserAgent)));
 
 	const nodeModulePath = `${nodeModuleName}/${pathInsideNodeModule}`;

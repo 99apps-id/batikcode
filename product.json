@@ -13,7 +13,7 @@
 	"serverLicensePrompt": "",
 	"serverApplicationName": "batikcode-server",
 	"serverDataFolderName": ".batikcode-server",
-	"serverDownloadUrlTemplate": "https://github.com/99apps-id/batikcode/releases/download/v0.1.0/batikcode-server-${os}-${arch}.tar.gz",
+	"serverDownloadUrlTemplate": "https://github.com/99apps-id/batikcode/releases/download/v0.1.1/batikcode-server-${os}-${arch}.tar.gz",
 	"tunnelApplicationName": "batikcode-tunnel",
 	"win32DirName": "BatikCode",
 	"win32NameVersion": "BatikCode IDE",

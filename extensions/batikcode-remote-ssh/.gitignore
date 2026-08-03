@@ -6,8 +6,6 @@
 /.vscode-test/
 /*.vsix
 /package.insiders.json
-/vscode.d.ts
-/vscode.proposed.*.d.ts
 /tsconfig.tsbuildinfo
 /.test/
 /coverage/

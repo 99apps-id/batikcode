@@ -64,9 +64,25 @@ jobs:
             echo "Npm install failed $i, trying again..."
           done
         env:
+          npm_config_arch: x64
+          VSCODE_ARCH: x64
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # TEMPORARY diagnostic: the Compile job's npm ci fails at the
+      # batikcode-remote-ssh sub-install (silent exit 1, ~70s) even though the
+      # Linux/Windows test jobs pass the same install. Dump the verbose log so
+      # the real error surfaces. Remove once root-caused.
+      - name: Debug remote-ssh install (temporary)
+        if: failure()
+        run: |
+          set -e
+          cd extensions/batikcode-remote-ssh
+          npm ci --loglevel verbose --no-audit --no-fund 2>&1 | tail -100
+        env:
+          npm_config_arch: x64
+          VSCODE_ARCH: x64
 
       - name: Type check /build/ scripts
         run: npm run typecheck

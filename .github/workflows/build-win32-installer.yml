@@ -115,7 +115,7 @@ jobs:
         run: npm run gulp "vscode-win32-${{ env.VSCODE_ARCH }}-user-setup"
 
       - name: Publish installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: batikcode-win32-x64-installers
           if-no-files-found: error

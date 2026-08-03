@@ -208,7 +208,7 @@ jobs:
           ls -lh "$name"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: batikcode-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: ${{ steps.package.outputs.asset }}

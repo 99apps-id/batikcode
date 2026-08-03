@@ -235,11 +235,12 @@ async function startAgentHost(): Promise<void> {
 		//     Codex defaults to off.
 		//  2. The SDK being reachable. Claude is a devDependency of this repo
 		//     so the bare-import path in `ClaudeAgentSdkService._loadSdk`
-		//     always succeeds in dev; in built products the SDK ships via
-		//     `product.agentSdks.claude` and the downloader handles it. Codex
-		//     is likewise a devDependency, so `CodexAgent._resolveSdkRoot`
-		//     resolves it from `node_modules` in dev; built products use the
-		//     env-var override or a `product.agentSdks.codex` entry.
+		//     always succeeds in dev; in built products the SDK ships bundled
+		//     in `node_modules` (BatikCode) and/or via `product.agentSdks.claude`
+		//     with the downloader as fallback. Codex is likewise a devDependency,
+		//     so `CodexAgent._resolveSdkRoot` resolves it from `node_modules` in
+		//     dev; built products use the bundled SDK, the env-var override, or
+		//     a `product.agentSdks.codex` entry.
 		// If either gate fails, the provider is not registered and never appears
 		// in the agent picker (matches the pre-CDN UX exactly).
 		if (isAgentEnabled(process.env[AgentHostClaudeAgentEnabledEnvVar], true) && (!environmentService.isBuilt || agentSdkDownloader.isAvailable(ClaudeSdkPackage))) {

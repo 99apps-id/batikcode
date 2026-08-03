@@ -25,9 +25,12 @@ interface TunnelSpec {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	if (vscode.env.remoteAuthority) {
-		return;
-	}
+	// Deliberately NOT gated on `vscode.env.remoteAuthority`: in remote SSH
+	// windows this extension runs in the remote extension host, so the
+	// `batikcode.devTunnel.start` command publishes a port that lives on the
+	// remote server (where the dev service is actually running) to a public
+	// trycloudflare.com URL. The remote SSH resolver only exposes ports as
+	// `localhost:<port>` locally; users want a real Cloudflare domain instead.
 
 	const logger = new Logger(vscode.l10n.t('BatikCode Cloudflare Dev Tunnel'));
 	const provider = new CloudflareQuickTunnelProvider(context, logger);
@@ -40,7 +43,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('batikcode.devTunnel.stopAll', () => provider.stopAll()),
 		vscode.commands.registerCommand('batikcode.devTunnel.selectCloudflared', () => selectCloudflaredBinary()),
 		vscode.commands.registerCommand('batikcode.devTunnel.openDownload', () => vscode.env.openExternal(CLOUDFLARED_DOWNLOAD_URL)),
-		await vscode.workspace.registerTunnelProvider(provider, {
+	);
+
+	// Register as the tunnel provider. In a remote window another tunnel
+	// provider may already own the single provider slot; that's fine — the
+	// commands above still publish ports to Cloudflare independently.
+	try {
+		context.subscriptions.push(await vscode.workspace.registerTunnelProvider(provider, {
 			tunnelFeatures: {
 				elevation: false,
 				protocol: true,
@@ -52,8 +61,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					}
 				]
 			}
-		})
-	);
+		}));
+	} catch (error) {
+		logger.info(vscode.l10n.t('Tunnel provider slot is taken by another provider; commands remain available. ({0})', error instanceof Error ? error.message : String(error)));
+	}
 }
 
 export function deactivate(): void { }
@@ -366,11 +377,46 @@ function isLoopbackHost(host: string): boolean {
 
 async function resolveCloudflaredExecutable(): Promise<string> {
 	const configured = vscode.workspace.getConfiguration('batikcode.devTunnel').get<string>(CLOUDFLARED_PATH_SETTING)?.trim();
-	if (!configured) {
-		return 'cloudflared';
+	if (configured) {
+		await validateCloudflaredExecutable(configured);
+		return configured;
 	}
-	await validateCloudflaredExecutable(configured);
-	return configured;
+	const discovered = await discoverCloudflaredExecutable();
+	if (discovered) {
+		return discovered;
+	}
+	return 'cloudflared';
+}
+
+/**
+ * Looks for a cloudflared binary in the usual install locations when it is not
+ * on PATH. The configured setting still wins; this only removes the need to
+ * configure the path manually for common setups (scoop, Program Files,
+ * per-user installs).
+ */
+async function discoverCloudflaredExecutable(): Promise<string | undefined> {
+	const candidates = process.platform === 'win32'
+		? [
+			path.join(process.env.USERPROFILE ?? '', 'scoop', 'shims', 'cloudflared.exe'),
+			path.join(process.env.USERPROFILE ?? '', 'scoop', 'apps', 'cloudflared', 'current', 'cloudflared.exe'),
+			path.join(process.env.ProgramFiles ?? '', 'cloudflared', 'cloudflared.exe'),
+			path.join(process.env.LOCALAPPDATA ?? '', 'cloudflared', 'cloudflared.exe'),
+			path.join(process.env.USERPROFILE ?? '', '.cloudflared', 'cloudflared.exe')
+		]
+		: [
+			'/usr/local/bin/cloudflared',
+			'/usr/bin/cloudflared',
+			path.join(process.env.HOME ?? '', '.cloudflared', 'cloudflared')
+		];
+	for (const candidate of candidates) {
+		try {
+			await access(candidate);
+			return candidate;
+		} catch {
+			// Keep looking.
+		}
+	}
+	return undefined;
 }
 
 async function validateCloudflaredExecutable(value: string): Promise<void> {

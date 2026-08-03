@@ -705,6 +705,21 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const provider = socialProvider ?? 'github';
 		const watch = StopWatch.create();
 		try {
+			// "Continue with Google" → Google (Gemini) OAuth via the BatikCode
+			// Provider Hub. The hub owns the Google OAuth store, so the Google
+			// account shows up there immediately without a second login. The
+			// default account service has no "google" auth provider — routing
+			// through the hub is what actually connects a Google account.
+			if (socialProvider === 'google') {
+				const connected = await this._connectGoogleViaProviderHub();
+				if (connected) {
+					this._userSignedIn = true;
+					this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: 'installed', installDuration: watch.elapsed(), signUpErrorCode: undefined, provider });
+					this._nextStep();
+				}
+				return;
+			}
+
 			const account = await this.defaultAccountService.signIn({
 				extraAuthorizeParameters: { get_started_with: 'copilot-vscode' },
 				provider: socialProvider,
@@ -725,6 +740,25 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				severity: Severity.Error,
 				message: localize('onboarding.signIn.error', "Sign-in failed. You can try again later from the Accounts menu."),
 			});
+		}
+	}
+
+	/**
+	 * Runs the Provider Hub's Google → Gemini CLI OAuth flow (PKCE, browser,
+	 * code paste) and returns whether the Google account was connected.
+	 */
+	private async _connectGoogleViaProviderHub(): Promise<boolean> {
+		try {
+			const result = await this.commandService.executeCommand<boolean>('batikcode.providerHub.connectGemini');
+			return result === true;
+		} catch {
+			// Provider Hub extension not available — fall through to a
+			// notification so the user isn't silently sent to a GitHub flow.
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: localize('onboarding.signIn.googleUnavailable', "Google (Gemini) sign-in is unavailable. Connect Google from the BatikCode Provider Hub instead."),
+			});
+			return false;
 		}
 	}
 

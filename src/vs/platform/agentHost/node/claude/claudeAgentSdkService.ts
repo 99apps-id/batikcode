@@ -146,12 +146,21 @@ export class ClaudeAgentSdkService implements IClaudeAgentSdkService {
 	}
 
 	async canLoadWithoutDownload(): Promise<boolean> {
-		// A dev override (explicit SDK root) is always local. So is the dev
-		// bare-import path, which is taken when there is no product config —
-		// `isAvailable` is false exactly in that case. Otherwise the SDK comes
-		// from the downloader, which is only local once it has been cached.
-		if (process.env[AgentHostClaudeSdkRootEnvVar] || !this._downloader.isAvailable(ClaudeSdkPackage)) {
+		// A dev override (explicit SDK root) is always local. So is the
+		// bare-import path, which resolves from a local `node_modules` — the
+		// devDependency in source builds and the bundled SDK in built
+		// BatikCode products. Otherwise the SDK comes from the downloader,
+		// which is only local once it has been cached.
+		if (process.env[AgentHostClaudeSdkRootEnvVar]) {
 			return true;
+		}
+		if (this._downloader.isSdkBundledLocally(ClaudeSdkPackage)) {
+			return true;
+		}
+		if (!this._downloader.isAvailable(ClaudeSdkPackage)) {
+			// No product config and no local SDK: the only remaining path is
+			// the bare import, which the local check above already ruled out.
+			return false;
 		}
 		return this._downloader.isSdkResolvableWithoutDownload(ClaudeSdkPackage);
 	}
@@ -242,29 +251,30 @@ export class ClaudeAgentSdkService implements IClaudeAgentSdkService {
 			return import(pathToFileURL(entry).href);
 		}
 
-		// 2. Built products: load via the downloader (cache → fetch the
-		//    per-host tarball described by `product.agentSdks.claude`). Errors
-		//    from this path propagate as-is so users see actionable diagnostics
-		//    on a CDN outage / corrupt cache / etc., not a misleading
-		//    "cannot find module" from a fallback that would never succeed in
-		//    a shipped build anyway.
-		//
-		//    We use `isAvailable` (env var || product config) — already false
-		//    in dev — to discriminate without injecting `INativeEnvironmentService`
-		//    here. The env-var branch above already returned, so reaching this
-		//    point with `isAvailable === true` means product config is present
-		//    and the downloader is the correct path.
-		if (this._downloader.isAvailable(ClaudeSdkPackage)) {
-			const root = await this._downloader.loadSdkRoot(ClaudeSdkPackage, CancellationToken.None);
-			const entry = join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs');
-			return import(pathToFileURL(entry).href);
-		}
+		// 2. Bare import: resolves via a local `node_modules` — the
+		//    devDependency in source builds and the bundled SDK in built
+		//    BatikCode products. Tried before the downloader so a bundled
+		//    SDK is always preferred over a CDN fetch. Errors are swallowed;
+		//    when the SDK isn't installed locally the downloader below is
+		//    the next attempt.
+		try {
+			return await import('@anthropic-ai/claude-agent-sdk');
+		} catch (err) {
+			// 3. Built products with product config: load via the downloader
+			//    (cache → fetch the per-host tarball described by
+			//    `product.agentSdks.claude`). Errors from this path propagate
+			//    as-is so users see actionable diagnostics on a CDN outage /
+			//    corrupt cache / etc., not a misleading "cannot find module".
+			if (this._downloader.isAvailable(ClaudeSdkPackage)) {
+				const root = await this._downloader.loadSdkRoot(ClaudeSdkPackage, CancellationToken.None);
+				const entry = join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs');
+				return import(pathToFileURL(entry).href);
+			}
 
-		// 3. Dev: bare import resolves via this repo's `node_modules` where
-		//    `@anthropic-ai/claude-agent-sdk` is a devDependency. Only reached
-		//    when neither the env var nor product config supplied a path —
-		//    i.e. exclusively in dev launches.
-		return import('@anthropic-ai/claude-agent-sdk');
+			// 4. Neither local SDK nor product config — surface the original
+			//    resolution error so it's actionable.
+			throw err;
+		}
 	}
 }
 

@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { timeout } from '../../../../base/common/async.js';
+import { Event } from '../../../../base/common/event.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
@@ -156,8 +158,40 @@ export class TerminalMainContribution extends Disposable implements IWorkbenchCo
 		// appears, which is exactly the hang this replaces.
 		lifecycleService.when(LifecyclePhase.Eventually).then(async () => {
 			try {
-				const terminal = terminalService.activeInstance
-					?? terminalService.instances[0]
+				// BatikCode: the startup terminal is a local-window convenience only.
+				// In a remote window the shell lives on the remote host and depends on
+				// the remote agent host being ready; force-creating one here would
+				// leave an empty, non-functional terminal (and force the panel open)
+				// whenever that connection is unavailable.
+				if (workbenchEnvironmentService.remoteAuthority) {
+					return;
+				}
+
+				// The startup terminal can fire before the (still-activating) extension
+				// host has registered terminal process support; calling createTerminal
+				// at that point throws "Could not create terminal when process support
+				// is not registered" and leaves the panel empty. Wait for support to be
+				// registered (capped), and skip silently if it never arrives — the
+				// user can still open a terminal manually once the host is ready.
+				if (!terminalService.isProcessSupportRegistered) {
+					await Promise.race([
+						Event.toPromise(terminalService.onDidRegisterProcessSupport),
+						timeout(15_000)
+					]);
+					if (!terminalService.isProcessSupportRegistered) {
+						return;
+					}
+				}
+
+				// A tab restored from a crashed session can come back as an instance
+				// with no process behind it (processId === undefined). Picking such a
+				// husk would show an empty panel and never start the pty host, so only
+				// reuse an instance that actually has a live process and create a
+				// fresh one otherwise.
+				const liveInstance = terminalService.activeInstance?.processId !== undefined
+					? terminalService.activeInstance
+					: terminalService.instances.find(instance => instance.processId !== undefined);
+				const terminal = liveInstance
 					?? await terminalService.createTerminal({ location: TerminalLocation.Panel });
 				terminalService.setActiveInstance(terminal);
 				await terminalGroupService.showPanel(false);

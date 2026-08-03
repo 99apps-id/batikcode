@@ -9,7 +9,7 @@ import { access, readFile } from 'fs/promises';
 import { homedir } from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { createCliInvocation, normalizeWorkingDirectoryCandidate } from './cliProcess';
+import { createCliInvocation, resolveCliWorkingDirectory } from './cliProcess';
 
 export type OAuthBootstrapId = 'github-cli' | 'codex-cli' | 'gemini-cli' | 'kiro-client' | 'antigravity';
 
@@ -950,25 +950,11 @@ async function findExecutable(command: string): Promise<string | undefined> {
 }
 
 async function resolveWorkingDirectory(): Promise<string> {
-	const candidates = [
-		vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
-		process.env.VSCODE_CWD,
-		process.cwd(),
-		homedir()
-	];
-	for (const value of candidates) {
-		if (!value) {
-			continue;
-		}
-		const candidate = normalizeWorkingDirectoryCandidate(value);
-		try {
-			await access(candidate);
-			return candidate;
-		} catch {
-			// Try the next reliable local directory.
-		}
-	}
-	return homedir();
+	return resolveCliWorkingDirectory({
+		workspaceDirectory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+		fallbackDirectories: [process.env.VSCODE_CWD, process.cwd()],
+		homeDirectory: homedir()
+	});
 }
 
 async function runWithInput(

@@ -18,6 +18,7 @@ $SERVER_TOKENFILE="$SERVER_DATA_DIR\.$DISTRO_COMMIT.token"
 $SERVER_CONNECTION_TOKEN=
 $SERVER_DOWNLOAD_URL="%%SERVER_DOWNLOAD_URL%%"
 $SERVER_VALIDATION_FLAG="%%SERVER_VALIDATION_FLAG%%"
+$AGENT_HOST_PIPE="\\.\pipe\batikcode-agent-host-$($DISTRO_COMMIT.Substring(0, [Math]::Min(12, $DISTRO_COMMIT.Length)))"
 
 $LISTENING_ON=
 $OS_RELEASE_ID=
@@ -94,6 +95,21 @@ else {
   "Server script already installed in $SERVER_SCRIPT"
 }
 
+# Extract custom extensions uploaded by the local Remote SSH resolver.
+$SERVER_EXTENSIONS_DIR="$SERVER_DATA_DIR\extensions"
+if(Test-Path "$env:USERPROFILE\batikcode-extensions.tar.gz") {
+  New-Item -ItemType Directory -Path $SERVER_EXTENSIONS_DIR -Force | Out-Null
+  tar -xf "$env:USERPROFILE\batikcode-extensions.tar.gz" -C $SERVER_EXTENSIONS_DIR
+  Remove-Item "$env:USERPROFILE\batikcode-extensions.tar.gz" -Force -ErrorAction SilentlyContinue
+}
+if(Test-Path "$env:USERPROFILE\batikcode-provider-hub.tar.gz") {
+  Write-Output "Updating BatikCode Provider Hub..."
+  New-Item -ItemType Directory -Path $SERVER_EXTENSIONS_DIR -Force | Out-Null
+  Remove-Item "$SERVER_EXTENSIONS_DIR\batikcode.batikcode-provider-hub" -Recurse -Force -ErrorAction SilentlyContinue
+  tar -xf "$env:USERPROFILE\batikcode-provider-hub.tar.gz" -C $SERVER_EXTENSIONS_DIR
+  Remove-Item "$env:USERPROFILE\batikcode-provider-hub.tar.gz" -Force -ErrorAction SilentlyContinue
+}
+
 # Modify the commit in the remote server to match the local value
 if(%%MODIFY_PRODUCT_JSON%%) {
   Write-Output "Will modify product.json on remote to match the commit value"
@@ -101,8 +117,19 @@ if(%%MODIFY_PRODUCT_JSON%%) {
   Set-Content -NoNewLine "$SERVER_DIR\product.json"
 }
 
-# Try to find if server is already running
-if(Get-Process node -ErrorAction SilentlyContinue | Where-Object Path -Like "$SERVER_DIR\*") {
+# Try to find if server is already running. Use its command line so an Agent
+# Host child process cannot be mistaken for the renderer-serving process.
+$SERVER_PROCESS = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.ExecutablePath -Like "$SERVER_DIR\*" -and $_.CommandLine -Match "server-main" } |
+  Select-Object -First 1
+
+if($SERVER_PROCESS -and $SERVER_PROCESS.CommandLine -NotLike "*--agent-host-path=$AGENT_HOST_PIPE*") {
+  Write-Output "Restarting server to enable the remote Agent Host"
+  Stop-Process -Id $SERVER_PROCESS.ProcessId -Force -ErrorAction SilentlyContinue
+  $SERVER_PROCESS = $null
+}
+
+if($SERVER_PROCESS) {
   Write-Output "Server script is already running $SERVER_SCRIPT"
 }
 else {
@@ -119,7 +146,7 @@ else {
   $SERVER_CONNECTION_TOKEN="%%SERVER_CONNECTION_TOKEN%%"
   [System.IO.File]::WriteAllLines($SERVER_TOKENFILE, $SERVER_CONNECTION_TOKEN)
 
-  $SCRIPT_ARGUMENTS="--start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_DATA_DIR_FLAG $SERVER_VALIDATION_FLAG $SERVER_INITIAL_EXTENSIONS --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms *> '$SERVER_LOGFILE'"
+  $SCRIPT_ARGUMENTS="--start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_DATA_DIR_FLAG $SERVER_VALIDATION_FLAG $SERVER_INITIAL_EXTENSIONS --agent-host-path=$AGENT_HOST_PIPE --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms *> '$SERVER_LOGFILE'"
 
   $START_ARGUMENTS = @{
     FilePath = "powershell.exe"

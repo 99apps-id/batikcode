@@ -21,6 +21,7 @@ SERVER_ARCH=
 SERVER_CONNECTION_TOKEN=
 SERVER_DOWNLOAD_URL=
 SERVER_VALIDATION_FLAG="%%SERVER_VALIDATION_FLAG%%"
+AGENT_HOST_SOCKET="$TMP_DIR/batikcode-agent-host-$UID-${DISTRO_COMMIT:0:12}.sock"
 
 LISTENING_ON=
 OS_RELEASE_ID=
@@ -225,12 +226,67 @@ else
   echo "Server script already installed in $SERVER_SCRIPT"
 fi
 
+# Archives produced by a Windows cross-build do not retain Unix executable
+# bits. Normalize the launchers after both a fresh install and a retry of an
+# already-extracted install so the remote host can actually start the server.
+chmod +x "$SERVER_SCRIPT" "$SERVER_DIR/node" 2>/dev/null || true
+find "$SERVER_DIR/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+
+# The agent host, workspace search and sandbox spawn native binaries that
+# live under node_modules (ripgrep, tgrep, the seccomp helper, the MXC
+# sandbox and the Copilot SDK prebuilds). Windows-created archives drop the
+# executable bit on these too, so normalize every file in the known native
+# binary directories.
+for native_bin_dir in \
+  "$SERVER_DIR/node_modules/@vscode/ripgrep-universal/bin" \
+  "$SERVER_DIR/node_modules/@github/copilot/sdk/ripgrep/bin" \
+  "$SERVER_DIR/node_modules/@github/copilot/tgrep/bin" \
+  "$SERVER_DIR/node_modules/@github/copilot/sdk/tgrep/bin" \
+  "$SERVER_DIR/node_modules/@vscode/sandbox-runtime/vendor" \
+  "$SERVER_DIR/node_modules/@microsoft/mxc-sdk/bin" \
+  "$SERVER_DIR/node_modules/@github/copilot/sdk/prebuilds" \
+  "$SERVER_DIR/node_modules/@github/copilot/prebuilds"; do
+  if [[ -d "$native_bin_dir" ]]; then
+    find "$native_bin_dir" -type f -exec chmod +x {} \; 2>/dev/null || true
+  fi
+done
+
 # Extract custom extensions if uploaded
 if [[ -f "$HOME/batikcode-extensions.tar.gz" ]]; then
   echo "Extracting custom extensions..."
   mkdir -p "$SERVER_DATA_DIR/extensions"
   tar -xf "$HOME/batikcode-extensions.tar.gz" -C "$SERVER_DATA_DIR/extensions"
   rm -f "$HOME/batikcode-extensions.tar.gz"
+fi
+
+# The Copilot extension ships native binaries under its own node_modules
+# (prebuilds, tgrep, the ripgrep shim, the sandbox runtime). A
+# Windows-created archive drops their executable bits, which makes the
+# agent model unable to spawn ripgrep on the remote host. Restore them on
+# every connect (not just after a fresh extraction) so already-installed
+# extensions self-heal.
+for native_bin_dir in \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@vscode/ripgrep-universal/bin \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@github/copilot/sdk/ripgrep/bin \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@github/copilot/tgrep/bin \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@github/copilot/sdk/tgrep/bin \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@vscode/sandbox-runtime/vendor \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@microsoft/mxc-sdk/bin \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@github/copilot/sdk/prebuilds \
+  "$SERVER_DATA_DIR/extensions"/github.copilot-chat/node_modules/@github/copilot/prebuilds; do
+  if [[ -d "$native_bin_dir" ]]; then
+    find "$native_bin_dir" -type f -exec chmod +x {} \; 2>/dev/null || true
+  fi
+done
+
+# Provider Hub is versioned and shipped separately so a small agent update
+# does not require rebuilding or uploading the much larger Copilot bundle.
+if [[ -f "$HOME/batikcode-provider-hub.tar.gz" ]]; then
+  echo "Updating BatikCode Provider Hub..."
+  mkdir -p "$SERVER_DATA_DIR/extensions"
+  rm -rf "$SERVER_DATA_DIR/extensions/batikcode.batikcode-provider-hub"
+  tar -xf "$HOME/batikcode-provider-hub.tar.gz" -C "$SERVER_DATA_DIR/extensions"
+  rm -f "$HOME/batikcode-provider-hub.tar.gz"
 fi
 
 # Modify the commit in the remote server to match the local value
@@ -251,6 +307,29 @@ else
   SERVER_RUNNING_PROCESS="$(ps -o pid,args -A | grep $SERVER_SCRIPT | grep -v grep)"
 fi
 
+# Servers installed before BatikCode's remote Agent Host support do not expose
+# the proxy channel used by the agent UI. Restart that exact server process once
+# so the upgraded launch arguments take effect.
+if [[ -n $SERVER_RUNNING_PROCESS ]] && ! echo "$SERVER_RUNNING_PROCESS" | grep -Fq -- "--agent-host-path=$AGENT_HOST_SOCKET"; then
+  echo "Restarting server to enable the remote Agent Host"
+  if [[ -z $SERVER_PID ]]; then
+    SERVER_PID="$(echo "$SERVER_RUNNING_PROCESS" | awk 'NR == 1 { print $1 }')"
+  fi
+  if [[ $SERVER_PID =~ ^[0-9]+$ ]]; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    for _ in {1..10}; do
+      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        break
+      fi
+      sleep 0.2
+    done
+    if kill -0 "$SERVER_PID" 2>/dev/null; then
+      kill -9 "$SERVER_PID" 2>/dev/null || true
+    fi
+  fi
+  SERVER_RUNNING_PROCESS=
+fi
+
 if [[ -z $SERVER_RUNNING_PROCESS ]]; then
   if [[ -f $SERVER_LOGFILE ]]; then
     rm $SERVER_LOGFILE
@@ -264,7 +343,10 @@ if [[ -z $SERVER_RUNNING_PROCESS ]]; then
   SERVER_CONNECTION_TOKEN="%%SERVER_CONNECTION_TOKEN%%"
   echo $SERVER_CONNECTION_TOKEN > $SERVER_TOKENFILE
 
-  nohup $SERVER_SCRIPT --start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_DATA_DIR_FLAG $SERVER_VALIDATION_FLAG $SERVER_INITIAL_EXTENSIONS --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms </dev/null &> $SERVER_LOGFILE &
+  # A per-user, per-build Unix socket avoids port collisions and lets the
+  # remote server bridge the renderer directly to an Agent Host on this host.
+  rm -f "$AGENT_HOST_SOCKET"
+  nohup $SERVER_SCRIPT --start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_DATA_DIR_FLAG $SERVER_VALIDATION_FLAG $SERVER_INITIAL_EXTENSIONS --agent-host-path="$AGENT_HOST_SOCKET" --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms </dev/null &> $SERVER_LOGFILE &
   echo $! > $SERVER_PIDFILE
 else
   echo "Server script is already running $SERVER_SCRIPT"
@@ -285,7 +367,7 @@ if [[ -f $SERVER_LOGFILE ]]; then
     fi
 
     LISTENING_ON="$(cat $SERVER_LOGFILE | grep -E 'Extension host agent listening on .+' | sed 's/Extension host agent listening on //')"
-    if [[ -n $LISTENING_ON ]]; then
+    if [[ -n $LISTENING_ON && -S $AGENT_HOST_SOCKET ]]; then
       break
     fi
 
@@ -294,6 +376,10 @@ if [[ -f $SERVER_LOGFILE ]]; then
 
   if [[ -z $LISTENING_ON ]]; then
     echo "Error: server did not start successfully"
+    print_install_results_and_exit 1
+  fi
+  if [[ ! -S $AGENT_HOST_SOCKET ]]; then
+    echo "Error: remote Agent Host socket was not created: $AGENT_HOST_SOCKET"
     print_install_results_and_exit 1
   fi
 else

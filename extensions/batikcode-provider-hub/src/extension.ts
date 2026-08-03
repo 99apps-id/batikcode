@@ -87,6 +87,11 @@ export function activate(context: vscode.ExtensionContext): BatikCodeProviderHub
 		new BatikCodeLanguageModelProvider(provider, providerRouter, oauthBootstrap, providerModelCatalog));
 	const registrationLog = vscode.window.createOutputChannel('BatikCode Models', { log: true });
 	context.subscriptions.push(registrationLog);
+	const extensionHostKind = context.extension.extensionKind === vscode.ExtensionKind.Workspace ? 'workspace' : 'ui';
+	const workspace = vscode.workspace.workspaceFolders?.[0]?.uri;
+	registrationLog.appendLine(
+		`[runtime] extensionHost=${extensionHostKind}; remote=${vscode.env.remoteName ?? 'local'}; workspace=${workspace?.toString() ?? 'none'}`
+	);
 	for (const [index, languageModelProvider] of languageModelProviders.entries()) {
 		const definition = MODEL_PROVIDERS[index];
 		const vendor = providerVendorId(definition.id);
@@ -107,6 +112,7 @@ export function activate(context: vscode.ExtensionContext): BatikCodeProviderHub
 		vscode.chat.createChatParticipant('batikcode.chat', handleChatRequest),
 		vscode.commands.registerCommand(HUB_COMMAND, () => openHub(context)),
 		vscode.commands.registerCommand('batikcode.providerHub.connectGitHub', () => connectGitHub(true)),
+		vscode.commands.registerCommand('batikcode.providerHub.connectGemini', () => connectGemini()),
 		vscode.commands.registerCommand('batikcode.providerHub.connectCopilot', () => connectCopilot()),
 		vscode.commands.registerCommand('batikcode.providerHub.manageOAuthBootstrap', (providerId?: string) => manageOAuthBootstrap(providerId)),
 		vscode.commands.registerCommand('batikcode.providerRouter.configure', (providerId?: string) => configureProviderCommand(providerId)),
@@ -374,6 +380,22 @@ async function connectGitHub(interactive: boolean): Promise<vscode.Authenticatio
 			void vscode.window.showErrorMessage(`GitHub connection failed: ${errorMessage(error)}`);
 		}
 		return undefined;
+	}
+}
+
+/**
+ * Runs the Google → Gemini CLI OAuth flow (PKCE + code paste) directly,
+ * without the "Manage OAuth connection" quick pick. The welcome screen calls
+ * this for its "Continue with Google" action so the Google account is stored
+ * in the same OAuth secrets the hub reads — no second login required.
+ */
+async function connectGemini(): Promise<boolean> {
+	try {
+		await oauthBootstrap.connect('gemini-cli');
+		return true;
+	} catch (error) {
+		void vscode.window.showErrorMessage(`Google (Gemini) connection failed: ${errorMessage(error)}`);
+		return false;
 	}
 }
 

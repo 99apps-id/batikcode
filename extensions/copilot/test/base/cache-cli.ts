@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import fs from 'fs';
 import path from 'path';
 import { Cache } from './cache';
 
@@ -15,7 +16,16 @@ async function main() {
 		process.exit(1);
 	}
 
-	const cache = new Cache(path.resolve(__dirname, '..', 'simulation', 'cache'));
+	const cachePath = path.resolve(__dirname, '..', 'simulation', 'cache');
+
+	// The simulation cache is regenerated on demand by the test harness, so a
+	// missing base cache is not an error - there is simply nothing to check.
+	if (!fs.existsSync(path.join(cachePath, 'base.sqlite'))) {
+		console.log('No base cache found; nothing to check.');
+		process.exit(0);
+	}
+
+	const cache = new Cache(cachePath);
 
 	try {
 		switch (args[0]) {

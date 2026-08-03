@@ -21,6 +21,7 @@
     "tunnelFactory"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onTunnel",
     "onCommand:batikcode.devTunnel.start",
     "onCommand:batikcode.devTunnel.stopAll",

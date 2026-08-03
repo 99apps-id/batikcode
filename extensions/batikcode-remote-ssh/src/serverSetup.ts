@@ -117,7 +117,13 @@ function prepareExtensionsTarball(extensionPath: string, platform: string, logge
     // synchronous copy, which blocks the extension host for minutes. It only
     // changes when the extensions are rebuilt, so it is cached against the
     // manifest each bundle is written beside.
-    if (!isTarballStale(cachedTarball, path.resolve(extensionPath, '..', 'copilot', 'package.json'))) {
+    const bundleInputs = [
+        path.resolve(extensionPath, '..', 'copilot', 'package.json'),
+        path.resolve(extensionPath, '..', 'copilot', 'dist', 'extension.js'),
+        path.resolve(extensionPath, '..', 'batikcode-provider-hub', 'package.json'),
+        path.resolve(extensionPath, '..', 'batikcode-provider-hub', 'out', 'extension.js'),
+    ];
+    if (!bundleInputs.some(input => isTarballStale(cachedTarball, input))) {
         logger.trace(`Reusing cached extensions tarball at ${cachedTarball}`);
         return cachedTarball;
     }
@@ -211,6 +217,37 @@ function prepareExtensionsTarball(extensionPath: string, platform: string, logge
     } catch {}
 
     return tarballPath;
+}
+
+/** Builds the small Provider Hub payload independently from the Copilot bundle. */
+function prepareProviderHubTarball(extensionPath: string, logger: Log): string {
+    const cachedTarball = path.join(os.tmpdir(), 'batikcode-provider-hub.tar.gz');
+    const localHubPath = path.resolve(extensionPath, '..', 'batikcode-provider-hub');
+    const bundleInputs = [
+        path.join(localHubPath, 'package.json'),
+        path.join(localHubPath, 'out', 'extension.js'),
+    ];
+    if (!bundleInputs.some(input => isTarballStale(cachedTarball, input))) {
+        logger.trace(`Reusing cached Provider Hub tarball at ${cachedTarball}`);
+        return cachedTarball;
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'batikcode-provider-hub-'));
+    const hubDest = path.join(tempDir, 'batikcode.batikcode-provider-hub');
+    fs.mkdirSync(hubDest, { recursive: true });
+    fs.copyFileSync(path.join(localHubPath, 'package.json'), path.join(hubDest, 'package.json'));
+    fs.cpSync(path.join(localHubPath, 'out'), path.join(hubDest, 'out'), { recursive: true });
+    const mediaPath = path.join(localHubPath, 'media');
+    if (fs.existsSync(mediaPath)) {
+        fs.cpSync(mediaPath, path.join(hubDest, 'media'), { recursive: true });
+    }
+
+    try {
+        execSync(`tar -czf "${cachedTarball}" -C "${tempDir}" .`, { stdio: 'ignore' });
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+    return cachedTarball;
 }
 
 const DEFAULT_DOWNLOAD_URL_TEMPLATE = 'https://github.com/VSCodium/vscodium/releases/download/${version}.${release}/vscodium-reh-${os}-${arch}-${version}.${release}.tar.gz';
@@ -394,25 +431,40 @@ export async function installCodeServer(
     // that matches this client, so it takes precedence over any release feed.
     let uploadedLocalServer = false;
     if (localServer) {
-        const localTarballPath = path.resolve(extensionPath, '..', '..', '..', 'batikcode-server.tar.gz');
-        try {
-            if (isTarballStale(localTarballPath, localServer.directory)) {
-                logger.trace(`Compressing ${localServer.directory} to ${localTarballPath}`);
-                execSync(`tar -czf "${localTarballPath}" -C "${localServer.directory}" .`, { stdio: 'ignore' });
-            } else {
-                logger.trace(`Reusing up-to-date server tarball at ${localTarballPath}`);
-            }
-            logger.trace(`Uploading ${localTarballPath} to remote batikcode-server.tar.gz via SFTP...`);
-            const sftp = await conn.sftp();
-            await new Promise<void>((resolve, reject) => {
-                sftp.fastPut(localTarballPath, 'batikcode-server.tar.gz', (err: any) => {
-                    if (err) { reject(err); } else { resolve(); }
-                });
-            });
+        const remoteDataDir = customInstallPath
+            ? customInstallPath.replace(/^~(?=\/|$)/, '$HOME')
+            : `$HOME/${vscodeServerConfig.serverDataFolderName}`;
+        const remoteServerScript = `${remoteDataDir}/bin/${localServer.commit}/bin/${vscodeServerConfig.serverApplicationName}`;
+        const escapedRemoteServerScript = remoteServerScript.replace(/(["\\`])/g, '\\$1');
+        const installedResult = platform !== 'windows'
+            ? await conn.exec(`[ -f "${escapedRemoteServerScript}" ] && echo "exists"`)
+            : undefined;
+        const alreadyInstalled = (installedResult?.stdout || '').trim() === 'exists';
+
+        if (alreadyInstalled) {
             uploadedLocalServer = true;
-            logger.trace(`Upload complete.`);
-        } catch (err: any) {
-            logger.trace(`Failed to ship the local server build (${err.message}). Remote will fall back to downloading.`);
+            logger.trace(`Matching local server build is already installed at ${remoteServerScript}; skipping upload.`);
+        } else {
+            const localTarballPath = path.resolve(extensionPath, '..', '..', '..', 'batikcode-server.tar.gz');
+            try {
+                if (isTarballStale(localTarballPath, localServer.directory)) {
+                    logger.trace(`Compressing ${localServer.directory} to ${localTarballPath}`);
+                    execSync(`tar -czf "${localTarballPath}" -C "${localServer.directory}" .`, { stdio: 'ignore' });
+                } else {
+                    logger.trace(`Reusing up-to-date server tarball at ${localTarballPath}`);
+                }
+                logger.trace(`Uploading ${localTarballPath} to remote batikcode-server.tar.gz via SFTP...`);
+                const sftp = await conn.sftp();
+                await new Promise<void>((resolve, reject) => {
+                    sftp.fastPut(localTarballPath, 'batikcode-server.tar.gz', (err: any) => {
+                        if (err) { reject(err); } else { resolve(); }
+                    });
+                });
+                uploadedLocalServer = true;
+                logger.trace(`Upload complete.`);
+            } catch (err: any) {
+                logger.trace(`Failed to ship the local server build (${err.message}). Remote will fall back to downloading.`);
+            }
         }
     } else {
         logger.info(
@@ -444,13 +496,53 @@ export async function installCodeServer(
         serverValidation: uploadedLocalServer ? vscodeServerConfig.serverValidation : 'force',
     };
 
-    // Try uploading custom extensions (Copilot / Provider Hub) on a best-effort basis
+    // Upload custom extensions when the remote copy is missing or stale. Merely
+    // checking that its directory exists permanently pinned Remote SSH hosts to
+    // the first Provider Hub manifest they received (including extensionKind=ui).
     try {
-        const checkResult = await conn.exec(`[ -d "$HOME/.batikcode-server/extensions/github.copilot-chat" ] && [ -d "$HOME/.batikcode-server/extensions/batikcode.batikcode-provider-hub" ] && echo "exists"`);
-        const existsOnRemote = (checkResult.stdout || '').trim() === 'exists';
+        const localHubManifestPath = path.resolve(extensionPath, '..', 'batikcode-provider-hub', 'package.json');
+        const localHubManifest = JSON.parse(fs.readFileSync(localHubManifestPath, 'utf8')) as { version?: string; extensionKind?: string[] };
+        const remoteDataDir = customInstallPath
+            ? customInstallPath.replace(/^~(?=\/|$)/, '$HOME')
+            : `$HOME/${vscodeServerConfig.serverDataFolderName}`;
+        const escapedRemoteDataDir = remoteDataDir.replace(/(["\\`])/g, '\\$1');
+        const remoteExtensionsDir = `${escapedRemoteDataDir}/extensions`;
+        const copilotMarker = '__BATIKCODE_COPILOT_PRESENT__';
+        const checkResult = await conn.exec(
+            `[ -d "${remoteExtensionsDir}/github.copilot-chat" ] && echo "${copilotMarker}"; ` +
+            `cat "${remoteExtensionsDir}/batikcode.batikcode-provider-hub/package.json" 2>/dev/null`
+        );
+        const remoteOutput = (checkResult.stdout || '').trim();
+        const copilotPresent = remoteOutput.split(/\r?\n/).includes(copilotMarker);
+        const remoteManifestText = remoteOutput
+            .split(/\r?\n/)
+            .filter(line => line !== copilotMarker)
+            .join('\n');
+        let remoteHubManifest: { version?: string; extensionKind?: string[] } | undefined;
+        try {
+            remoteHubManifest = JSON.parse(remoteManifestText);
+        } catch {
+            // Missing or malformed manifests are replaced below.
+        }
+        const remoteHubIsCurrent = remoteHubManifest?.version === localHubManifest.version
+            && remoteHubManifest?.extensionKind?.[0] === 'workspace';
 
-        if (existsOnRemote) {
-            logger.trace(`Custom extensions already exist on remote. Skipping upload to save time.`);
+        if (copilotPresent && remoteHubIsCurrent) {
+            logger.trace(`Remote custom extensions are current (Provider Hub ${localHubManifest.version}).`);
+        } else if (copilotPresent) {
+            const providerHubTarball = prepareProviderHubTarball(extensionPath, logger);
+            logger.trace(`Uploading Provider Hub ${localHubManifest.version} update via SFTP...`);
+            const sftp = await conn.sftp();
+            await new Promise<void>((resolve, reject) => {
+                sftp.fastPut(providerHubTarball, 'batikcode-provider-hub.tar.gz', (err: Error | undefined) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+            logger.trace(`Provider Hub update upload complete.`);
         } else {
             const localExtTarball = prepareExtensionsTarball(extensionPath, platform || 'linux', logger);
             if (fs.existsSync(localExtTarball)) {

@@ -21,7 +21,7 @@ export function openAiChatCompletionsUrl(providerId: string, endpoint: string, m
 }
 
 export function isVisionModel(model: string): boolean {
-	return /vision|vlm|(?:^|[-_/])vl(?:[-_/]|$)|llava|pixtral|gpt-4o|gpt-4\.1|gpt-5|o3|o4-mini|claude|gemini|grok-[2-9]|qwen.*omni|internvl|minicpm-v/i.test(model);
+	return /vision|vlm|(?:^|[-_/])vl\d*(?:[-_/]|$)|llava|pixtral|gpt-4o|gpt-4\.1|gpt-5|o3|o4-mini|claude|gemini|grok-[2-9]|qwen.*omni|qvq|janus|internvl|minicpm-v/i.test(model);
 }
 
 /**

@@ -4,7 +4,7 @@
   "description": "Connect accounts and configure AI providers from one secure BatikCode surface.",
   "publisher": "batikcode",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.130.0"
   },
@@ -23,6 +23,7 @@
   ],
   "main": "./out/extension.js",
   "extensionKind": [
+    "workspace",
     "ui"
   ],
   "capabilities": {
@@ -240,7 +241,7 @@
   "scripts": {
     "compile": "gulp compile-extension:batikcode-provider-hub",
     "watch": "gulp watch-extension:batikcode-provider-hub",
-    "test": "node --test out/test/providerProtocol.test.js out/test/providerRouter.test.js out/test/cliImages.test.js"
+    "test": "node --test out/test/providerProtocol.test.js out/test/providerRouter.test.js out/test/cliImages.test.js out/test/remoteExecution.test.js"
   },
   "repository": {
     "type": "git",

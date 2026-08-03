@@ -216,5 +216,8 @@
 		".agents/skills/.local": true,
 		".claude/skills/.local": true,
 	},
-	"chat.sessionSync.enabled": true
+	"chat.sessionSync.enabled": true,
+	"batikcode.pet.enabled": true,
+	"terminal.integrated.allowInUntrustedWorkspace": true,
+	"terminal.integrated.allowMnemonics": true
 }

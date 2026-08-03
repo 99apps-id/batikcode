@@ -384,8 +384,6 @@ export class RemoteAgentHostProtocolClient extends Disposable implements IAgentC
 			}
 		}));
 
-		// Detect silently-dead transports — see {@link _resetLivenessTimers}.
-		this._resetLivenessTimers();
 	}
 
 	/**
@@ -477,6 +475,10 @@ export class RemoteAgentHostProtocolClient extends Disposable implements IAgentC
 		this._updateSystemProxyEnabled();
 		this._updateTerminalAutoApproveRules();
 		this._updateCodexEnabled();
+		// Start the watchdog only after the initial handshake. A transport can
+		// be intentionally deferred while Remote SSH installs and forwards its
+		// server; timing it out in the constructor closes it before connect().
+		this._resetLivenessTimers();
 		this._transitionTo({ kind: AgentHostClientState.Connected });
 	}
 

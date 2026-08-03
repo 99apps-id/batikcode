@@ -82,13 +82,16 @@ export async function fetchRelease(serverDownloadUrlTemplate: string, version: s
 
         // Parse and sort all releases descending by semver,
         // using hyphen to separate the version from the build/release number.
+        // A release without a build number (e.g. "v0.1.0") is still a valid
+        // version: "0.1.0-" is not, so fall back to the bare version string
+        // whenever the build is empty. Without this, BatikCode's own
+        // server releases (tagged v0.1.0, no build suffix) are filtered out
+        // and the resolver falls back to a foreign VSCodium build.
+        const releaseVersion = (r: IRelease) => r.build ? `${r.version}-${r.build}` : r.version;
         const releases = data
             .map(releaseInfo => splitRelease(releaseInfo.name))
-            .filter(r => semver.valid(`${r.version}-${r.build}`))
-            .sort((a, b) => semver.rcompare(
-                `${a.version}-${a.build}`,
-                `${b.version}-${b.build}`
-            ));
+            .filter(r => semver.valid(releaseVersion(r)))
+            .sort((a, b) => semver.rcompare(releaseVersion(a), releaseVersion(b)));
 
         if (objective === 'latest') {
             // Latest version

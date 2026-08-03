@@ -14,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       draft:
-        description: Create the release as a draft
+        description: Create the release as a draft (drafts block downloads)
         type: boolean
-        default: true
+        default: false
   push:
     tags:
       - 'v*'
@@ -102,6 +102,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # TEMPORARY diagnostic: isolates the batikcode-remote-ssh sub-install that
+      # has been failing silently inside the root postinstall (all 13 runs so far
+      # died at "Install dependencies" with no output). Runs standalone with
+      # verbose npm logging so the real error surfaces in ~3 minutes instead of
+      # waiting for the full root install. Remove once the cause is fixed.
+      - name: Debug remote-ssh deps (temporary)
+        run: |
+          set -e
+          source ./build/azure-pipelines/linux/setup-env.sh
+          export GIT_CONFIG_COUNT=2
+          export GIT_CONFIG_KEY_0="url.https://github.com/.insteadof"
+          export GIT_CONFIG_VALUE_0="ssh://git@github.com/"
+          export GIT_CONFIG_KEY_1="url.https://github.com/.insteadof"
+          export GIT_CONFIG_VALUE_1="git@github.com:"
+          cd extensions/batikcode-remote-ssh
+          npm ci --loglevel verbose --no-audit --no-fund 2>&1 | tail -100
+
       - name: Install dependencies
         run: |
           set -e
@@ -125,6 +142,8 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           ONNXRUNTIME_NODE_INSTALL: skip
+          # TEMPORARY: verbose sub-installs expose the silent remote-ssh failure.
+          NPM_CONFIG_LOGLEVEL: verbose
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add swap space
@@ -195,12 +214,28 @@ jobs:
           path: ${{ steps.package.outputs.asset }}
           retention-days: 14
 
+      - name: Resolve BatikCode release tag
+        id: tag
+        run: |
+          # BatikCode versions its own releases (e.g. v0.1.0), not the upstream
+          # Code - OSS version. Read the tag from the server download URL
+          # template in product.json so the release tag and the template can
+          # never drift apart.
+          tag=$(node -e "const t=require('./product.json').serverDownloadUrlTemplate; const m=t.match(/releases\/download\/(v[^/]+)\//); if (!m) { console.error('cannot parse release tag from serverDownloadUrlTemplate'); process.exit(1); } console.log(m[1])")
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
       - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
-          # A manual run publishes under the current package version; a tag push
-          # publishes under that tag.
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.package.outputs.version) }}
+          # A manual run publishes under BatikCode's own release tag (resolved
+          # from the server download URL template above); a tag push publishes
+          # under the pushed tag. Both update the same release if the tag
+          # already exists.
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.tag.outputs.tag }}
+          # BatikCode is not final yet: every server release is a pre-release
+          # until the distribution gate closes. Flip to false before the first
+          # stable cut.
+          prerelease: true
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           files: ${{ steps.package.outputs.asset }}
           fail_on_unmatched_files: true

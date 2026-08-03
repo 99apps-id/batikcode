@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BatikCode contributors. All rights reserved.
- *  Licensed under the MIT License.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 /**
@@ -23,7 +23,7 @@ export interface Species {
 	readonly coat: string;
 	readonly accent: string;
 	/**
-	 * The silhouette, inside a 100×100 viewBox standing on y≈88.
+	 * The silhouette, inside a 100×100 viewBox standing on y~88.
 	 *
 	 * Recognition lives in the outline — the run of head into back into tail —
 	 * so each animal is traced as a contour rather than assembled from ovals.

@@ -109,7 +109,7 @@ export class ChatInputOutputMarkdownProgressPart extends BaseChatToolInvocationS
 				}),
 			} : undefined,
 			isError,
-		ChatInputOutputMarkdownProgressPart._expandedByDefault.get(toolInvocation) ?? false,
+			ChatInputOutputMarkdownProgressPart._expandedByDefault.get(toolInvocation) ?? false,
 			shouldShimmerForTool(toolInvocation, message),
 		));
 		this._register(toDisposable(() => ChatInputOutputMarkdownProgressPart._expandedByDefault.set(toolInvocation, collapsibleListPart.expanded)));

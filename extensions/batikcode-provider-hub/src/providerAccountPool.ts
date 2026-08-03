@@ -140,7 +140,7 @@ export class ProviderAccountPool implements vscode.Disposable {
 			await this.addAccount(providerId, providerName, accounts.length);
 		} else if (selection.action === 'import') {
 			await this.importAccounts(providerId, providerName, accounts);
-		} else if ('accountId' in selection && selection.accountId) {
+		} else if (selection.action === 'account' && selection.accountId) {
 			await this.manageAccount(providerId, providerName, selection.accountId);
 		}
 	}

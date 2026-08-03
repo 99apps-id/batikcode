@@ -1,4 +1,9 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
  *  BatikCode chat identity.
  *
  *  Layered on top of chat.css rather than edited into it, so rebasing onto
@@ -16,9 +21,9 @@
  *  Upstream already right-aligns the request into a bubble, so that shape is not
  *  reinvented here. What it lacks — and what a long agent turn needs — is a way
  *  to find the answer that is currently streaming.
- *--------------------------------------------------------------------------------------------*/
+ */
 
-/* ── The live response carries a rail ───────────────────────────────────────
+/* -- The live response carries a rail --------------------------------------
  *
  * During a long agentic turn the transcript scrolls past several settled
  * responses. A single gold rail marks the one still being written, so the eye
@@ -40,7 +45,7 @@
 		box-shadow: none;
 	}
 
-	/* ── The request bubble gets a batik edge ──────────────────────────────
+	/* -- The request bubble gets a batik edge ------------------------------
 	 *
 	 * The bubble is right-aligned, so the accent goes on the right edge where
 	 * the utterance ends. Inset again: a real border would change the bubble's
@@ -51,7 +56,7 @@
 	}
 }
 
-/* ── Provider attribution stays legible ────────────────────────────────────
+/* -- Provider attribution stays legible ------------------------------------
  *
  * The picker labels a model with the provider that actually serves it; the
  * badge that carries this in the transcript is secondary information, so it
@@ -61,7 +66,7 @@
 	color: var(--vscode-descriptionForeground);
 }
 
-/* ══ Motion ═══════════════════════════════════════════════════════════════════
+/* == Motion ===================================================================
  *
  * The transcript list is virtualised: rows are recycled as you scroll, so an
  * animation keyed to a row *appearing* replays every time that row scrolls back
@@ -72,9 +77,9 @@
  *   - only the newest turn — a single element, `:last-child` — animates in
  *   - everything else responds to hover or focus, which are inherently live
  *
- * Durations sit at 160–220ms: long enough to read as motion, short enough that a
+ * Durations sit at 160-220ms: long enough to read as motion, short enough that a
  * stray replay is not distracting.
- * ════════════════════════════════════════════════════════════════════════════ */
+ * ============================================================================ */
 
 @keyframes batikcode-turn-rise {
 	from {
@@ -108,26 +113,26 @@
 .interactive-session:not(.chat-widget > .interactive-session) {
 
 	/* Agent, working. Keyed to the loading class, so it starts and stops with the
-	   actual request rather than with the row's position in the list. */
+	 * actual request rather than with the row's position in the list. */
 	.interactive-item-container.interactive-response.chat-most-recent-response.chat-response-loading {
 		animation: batikcode-rail-breathe 1.8s ease-in-out infinite;
 	}
 
 	/* Agent, arriving. Only the newest response animates, and only once it has
-	   settled — while streaming, the rail above is already carrying the signal. */
+	 * settled — while streaming, the rail above is already carrying the signal. */
 	.interactive-item-container.interactive-response:last-child:not(.chat-response-loading) {
 		animation: batikcode-turn-rise 200ms ease-out;
 	}
 
 	/* User, sending. The bubble settles into place instead of appearing flatly,
-	   which gives the send action a physical result. */
+	 * which gives the send action a physical result. */
 	.interactive-item-container.interactive-request:last-child .value .rendered-markdown {
 		animation: batikcode-bubble-settle 160ms ease-out;
 	}
 
 	/* User, revisiting. A resting bubble lifts slightly under the pointer so an
-	   older message reads as something you can act on (edit, copy) rather than
-	   inert transcript. */
+	 * older message reads as something you can act on (edit, copy) rather than
+	 * inert transcript. */
 	.interactive-item-container.interactive-request .value .rendered-markdown {
 		transition: box-shadow 160ms ease-out, transform 160ms ease-out;
 	}

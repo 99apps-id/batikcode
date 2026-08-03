@@ -213,7 +213,7 @@ export class TelegramBotController implements vscode.Disposable {
 		await vscode.env.clipboard.writeText(command);
 		const botHandle = this.botUser?.username ? `@${this.botUser.username}` : 'your bot';
 		void vscode.window.showInformationMessage(
-			`Pairing code ready for ${botHandle}. Open a private Telegram chat with ${botHandle}, paste the copied “${command}” command within 10 minutes, then watch the Telegram log for “paired user”.`
+			`Pairing code ready for ${botHandle}. Open a private Telegram chat with ${botHandle}, paste the copied "${command}" command within 10 minutes, then watch the Telegram log for "paired user".`
 		);
 		this.output.appendLine(`[telegram] one-time pairing challenge created for ${botHandle}; waiting for private /pair (expires in 10 min)`);
 	}
@@ -510,6 +510,7 @@ export class TelegramBotController implements vscode.Disposable {
 		if (!isAuthorizedTelegramUser(message.chat.type, userId, this.allowedUserIds())) {
 			this.output.appendLine(`[telegram] rejected unauthorized user ${userId ?? 'unknown'} in ${message.chat.type} chat`);
 			await this.safeSend(api, chatId, [
+				// allow-any-unicode-next-line
 				'❌ You are not authorized to control this BatikCode instance.',
 				'',
 				'To pair, generate a pairing code inside BatikCode:',
@@ -538,6 +539,7 @@ export class TelegramBotController implements vscode.Disposable {
 				case 'new':
 				case 'clear':
 					this.ai.clearHistory(chatId);
+					// allow-any-unicode-next-line
 					await this.safeSend(api, chatId, '🧹 Conversation history cleared. Starting fresh!');
 					break;
 				case 'models':
@@ -640,6 +642,7 @@ export class TelegramBotController implements vscode.Disposable {
 		this.updateState('busy', 'Online · coding', `Running an agent task for chat ${chatId}.`);
 		await vscode.commands.executeCommand('setContext', 'batikcode.telegram.busy', true);
 		void vscode.window.showInformationMessage(`Telegram coding task received for ${workspace.name}.`);
+		// allow-any-unicode-next-line
 		await this.safeSend(api, chatId, `✅ Agent task started in "${workspace.name}". I'll read files, make changes, and report back.\n\nUse /cancel to stop.`);
 
 		// Typing indicator — refresh every 4s (Telegram expires after ~5s).
@@ -658,9 +661,11 @@ export class TelegramBotController implements vscode.Disposable {
 				return;
 			}
 			if (progressTick === 1) {
+				// allow-any-unicode-next-line
 				await this.safeSend(api, chatId, '⏳ Working… reading files and planning changes.');
 			} else {
 				const minutes = Math.ceil(progressTick * 30 / 60);
+				// allow-any-unicode-next-line
 				await this.safeSend(api, chatId, `⏳ Still working (${minutes} min elapsed)…`);
 			}
 		}, 30_000);
@@ -715,6 +720,7 @@ export class TelegramBotController implements vscode.Disposable {
 
 			// Flush remaining accumulated text.
 			await sendAccumulated(true);
+			// allow-any-unicode-next-line
 			await this.safeSend(api, chatId, '✅ Agent task completed.');
 
 			this.output.appendLine(`[telegram] agent task completed successfully`);
@@ -737,6 +743,7 @@ export class TelegramBotController implements vscode.Disposable {
 			if (cause) {
 				this.output.appendLine(`[telegram] caused by: ${cause instanceof Error ? cause.stack ?? cause.message : String(cause)}`);
 			}
+			// allow-any-unicode-next-line
 			await this.sendChunks(api, chatId, `❌ ${message}`);
 		} finally {
 			clearTimeout(timeoutTimer);
@@ -971,6 +978,7 @@ function helpText(): string {
 	return [
 		'<b>BatikCode Remote Coding — Commands</b>',
 		'',
+		// allow-any-unicode-next-line
 		'💬 <b>Natural Chat (no / needed!)</b>',
 		'Just send any text to chat with the active AI model.',
 		'The bot understands natural language about your code.',
@@ -1026,14 +1034,17 @@ function welcomeText(): string {
 
 function welcomeBackText(): string {
 	return [
+		// allow-any-unicode-next-line
 		'<b>👋 Welcome back!</b>',
 		'',
 		'You are already paired with BatikCode. Here\'s what you can do:',
 		'',
+		// allow-any-unicode-next-line
 		'💬 <b>Natural Chat</b>',
 		'Just send any message and I\'ll respond using the active AI model.',
 		'No need for / commands for casual questions!',
 		'',
+		// allow-any-unicode-next-line
 		'🤖 <b>Model Control</b>',
 		'• /models — List available AI models',
 		'• /model &lt;number&gt; — Pick a model from Telegram',

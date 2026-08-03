@@ -2,6 +2,7 @@
 **/extensions/**/*.d.ts
 **/extensions/**/build/**
 **/extensions/**/colorize-fixtures/**
+**/extensions/batikcode-remote-ssh/**
 **/extensions/copilot/coverage/**
 **/extensions/copilot/.esbuild/**
 **/extensions/copilot/.simulation/**

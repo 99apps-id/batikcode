@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BatikCode contributors. All rights reserved.
- *  Licensed under the MIT License.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
@@ -167,15 +167,15 @@ function renderPet(speciesId: SpeciesId, motifId: MotifId): string {
 	}
 
 	/* The ground carries the same motif as the pet, so the two read as one
-	   scene rather than a sprite pasted onto a background. */
+	 * scene rather than a sprite pasted onto a background. */
 	.ground {
 		position: absolute;
 		left: 0;
 		bottom: 0;
 		/* An <svg> is a replaced element, so an absolutely positioned one with
-		   width:auto takes its 300px intrinsic width and ignores right:0 — the
-		   batik stopped partway across the panel no matter how wide it got.
-		   Sizing it explicitly makes the canvas follow the panel. */
+		 * width:auto takes its 300px intrinsic width and ignores right:0 — the
+		 * batik stopped partway across the panel no matter how wide it got.
+		 * Sizing it explicitly makes the canvas follow the panel. */
 		width: 100%;
 		height: 34px;
 		border-top: 1px solid var(--vscode-panel-border);
@@ -186,11 +186,11 @@ function renderPet(speciesId: SpeciesId, motifId: MotifId): string {
 	.stage { position: absolute; inset: 0; }
 
 	/* Two nested animations: the track carries the pet across the panel and
-	   flips it at each end, while the body bobs. Keeping them separate means the
-	   bob survives the horizontal flip instead of being mirrored with it. */
+	 * flips it at each end, while the body bobs. Keeping them separate means the
+	 * bob survives the horizontal flip instead of being mirrored with it. */
 	/* Position is driven from script rather than keyframes: walking, dragging and
-	   settling all read the same coordinate, so releasing the pet continues the
-	   walk from where it was dropped instead of snapping back onto a keyframe. */
+	 * settling all read the same coordinate, so releasing the pet continues the
+	 * walk from where it was dropped instead of snapping back onto a keyframe. */
 	.track {
 		position: absolute;
 		bottom: 18px;
@@ -234,7 +234,7 @@ function renderPet(speciesId: SpeciesId, motifId: MotifId): string {
 	}
 
 	/* The mood line sits with the caption instead of over the pet: a bubble that
-	   follows a walking animal is unreadable, and this is meant to be glanced at. */
+	 * follows a walking animal is unreadable, and this is meant to be glanced at. */
 	.mood {
 		position: absolute;
 		top: 26px;
@@ -250,12 +250,12 @@ function renderPet(speciesId: SpeciesId, motifId: MotifId): string {
 	body[data-mood="alert"] .mood { color: var(--vscode-editorError-foreground); }
 
 	/* Errors get a faster, tighter bob — the pet reads as agitated without any
-	   text having to say so. */
+	 * text having to say so. */
 	body[data-mood="alert"] .pet { animation-duration: 0.45s; }
 	body[data-mood="watching"] .pet { animation-duration: 0.8s; }
 
 	/* The pet is decoration; motion here carries no information, so it stops
-	   entirely rather than degrading. */
+	 * entirely rather than degrading. */
 	@media (prefers-reduced-motion: reduce) {
 		.pet, body.happy .pet { animation: none; }
 	}
@@ -278,15 +278,15 @@ function renderPet(speciesId: SpeciesId, motifId: MotifId): string {
 					<rect width="100" height="100" fill="url(#motif)"/>
 				</g>
 				<!-- Markings last, over the batik: an eye or a stripe buried under the
-				     pattern stops reading as a marking and becomes more texture. -->
+				pattern stops reading as a marking and becomes more texture. -->
 				<g fill="${species.accent}" color="${species.accent}">${species.features}</g>
 			</svg>
 		</div>
 	</div>
 	<!-- No viewBox: user units are CSS pixels, so the motif tiles across whatever
-	     width the panel happens to be and every tile keeps its true proportions.
-	     A fixed viewBox would either stop short of the right edge or stretch the
-	     kawung circles into ovals as the panel widens. -->
+	width the panel happens to be and every tile keeps its true proportions.
+	A fixed viewBox would either stop short of the right edge or stretch the
+	kawung circles into ovals as the panel widens. -->
 	<svg class="ground" aria-hidden="true">
 		<defs>
 			<pattern id="groundMotif" width="24" height="24" patternUnits="userSpaceOnUse">

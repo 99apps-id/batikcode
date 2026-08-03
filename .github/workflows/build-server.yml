@@ -225,7 +225,7 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Publish to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # A manual run publishes under BatikCode's own release tag (resolved
           # from the server download URL template above); a tag push publishes

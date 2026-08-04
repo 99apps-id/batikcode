@@ -257,6 +257,15 @@ export function prepareBuiltInCopilotRipgrepShim(platform: string, arch: string,
 		if (fs.existsSync(path.join(sourceCopilotBase, 'sdk'))) {
 			fs.mkdirSync(copilotBase, { recursive: true });
 			fs.cpSync(sourceCopilotBase, copilotBase, { recursive: true });
+			// Mirror build/.moduleignore: strip the optional native payload trees
+			// (clipboard, foundry-local-sdk, mxc-bin, pvrecorder, sharp) and the
+			// top-level prebuilds/ripgrep. `materializeBuiltInCopilotSdkPlatformFiles`
+			// and the ripgrep shim below re-add the target-platform binaries, and the
+			// native payloads contain non-PE .node files that break win32's
+			// patchWin32DependenciesTask (rcedit).
+			for (const dir of ['prebuilds', 'clipboard', 'foundry-local-sdk', 'mxc-bin', 'pvrecorder', 'ripgrep', 'sharp']) {
+				fs.rmSync(path.join(copilotBase, dir), { recursive: true, force: true });
+			}
 			console.log(`[prepareBuiltInCopilotRipgrepShim] Materialized @github/copilot from repo source into ${copilotBase}`);
 		} else {
 			throw new Error(`[prepareBuiltInCopilotRipgrepShim] Copilot SDK directory not found at ${copilotSdkBase} (repo source also missing at ${sourceCopilotBase})`);

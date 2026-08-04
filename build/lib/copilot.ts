@@ -7,6 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ensureNpmPackage, type EnsureNpmPackageOptions } from './npmPackage.ts';
 
+const REPO_ROOT = path.dirname(path.dirname(import.meta.dirname));
+
 /**
  * The platforms that @github/copilot ships platform-specific packages for.
  * These are the `@github/copilot-{platform}` optional dependency packages.
@@ -241,7 +243,24 @@ export function prepareBuiltInCopilotRipgrepShim(platform: string, arch: string,
 	const copilotBase = path.join(extensionNodeModules, '@github', 'copilot');
 	const copilotSdkBase = path.join(copilotBase, 'sdk');
 	if (!fs.existsSync(copilotSdkBase)) {
-		throw new Error(`[prepareBuiltInCopilotRipgrepShim] Copilot SDK directory not found at ${copilotSdkBase}`);
+		// The `@github/copilot` package (which carries the SDK) is not guaranteed
+		// to be present inside the packaged built-in extension:
+		//  - `doPackageLocalExtensionsStream` (win32 core-ci) only includes shared
+		//    production deps, not copilot-specific ones.
+		//  - `packageCopilotExtensionStream` globs the source node_modules, which
+		//    can be raced by the copilot esbuild step re-running the postinstall
+		//    (it re-materializes the SDK), aborting the deps stream before
+		//    `@github/copilot` is copied (seen for linux-arm64 REH builds).
+		// The repo source tree is stable at packaging time (postinstall has
+		// already populated the SDK), so materialize from there before failing.
+		const sourceCopilotBase = path.join(REPO_ROOT, 'extensions', 'copilot', 'node_modules', '@github', 'copilot');
+		if (fs.existsSync(path.join(sourceCopilotBase, 'sdk'))) {
+			fs.mkdirSync(copilotBase, { recursive: true });
+			fs.cpSync(sourceCopilotBase, copilotBase, { recursive: true });
+			console.log(`[prepareBuiltInCopilotRipgrepShim] Materialized @github/copilot from repo source into ${copilotBase}`);
+		} else {
+			throw new Error(`[prepareBuiltInCopilotRipgrepShim] Copilot SDK directory not found at ${copilotSdkBase} (repo source also missing at ${sourceCopilotBase})`);
+		}
 	}
 	materializeBuiltInCopilotSdkPlatformFiles(copilotPackagePlatformArch, tgrepPlatformArch, copilotBase, appNodeModulesDir);
 	pruneNonTargetCopilotSdkPrebuilds(copilotPackagePlatformArch, path.join(copilotSdkBase, 'prebuilds'), copilotPlatforms);

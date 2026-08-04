@@ -481,7 +481,18 @@ export function packageCopilotExtensionStream(disableMangle: boolean): Stream {
 	);
 
 	const productionDependencies = getProductionDependencies('extensions/copilot');
-	const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
+	// Exclude `@github/copilot` from the deps glob. The copilot esbuild step
+	// re-runs the extension postinstall, which re-materializes (rm + cp) files
+	// under `extensions/copilot/node_modules/@github/copilot` while the deps
+	// stream is globbing the same tree, aborting gulp with ENOENT (flaky across
+	// CI hosts/archs). The SDK is instead materialized deterministically at
+	// packaging time by `prepareBuiltInCopilotRipgrepShim` (see build/lib/copilot.ts).
+	const copilotPackageDir = path.join(extensionPath, 'node_modules', '@github', 'copilot');
+	const dependenciesSrc = productionDependencies
+		.filter(d => d !== copilotPackageDir && !d.startsWith(copilotPackageDir + path.sep))
+		.map(d => path.relative(root, d))
+		.map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`])
+		.flat();
 
 	return es.merge(
 		localExtensionsStream,

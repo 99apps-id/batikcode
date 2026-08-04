@@ -304,14 +304,14 @@ export class WorktreeIsolation extends Disposable {
 			enum: gitInfo ? ['folder', 'worktree'] : ['folder'],
 			enumLabels: gitInfo ? [localize('agentHost.sessionConfig.isolation.folder', "Folder"), localize('agentHost.sessionConfig.isolation.worktree', "Worktree")] : [localize('agentHost.sessionConfig.isolation.folder', "Folder")],
 			enumDescriptions: gitInfo ? [localize('agentHost.sessionConfig.isolation.folderDescription', "Work directly in the folder"), localize('agentHost.sessionConfig.isolation.worktreeDescription', "Create a Git worktree for isolation")] : [localize('agentHost.sessionConfig.isolation.folderDescription', "Work directly in the folder")],
-			default: gitInfo ? 'worktree' : 'folder',
+			default: 'folder',
 			readOnly: !gitInfo,
 			sessionMutable: false,
 		});
 
 		// Resolve isolation first — downstream schema shapes (branch's
 		// read-only mode + enum restriction) depend on the effective value.
-		const isolationDefault: 'folder' | 'worktree' = gitInfo ? 'worktree' : 'folder';
+		const isolationDefault: 'folder' | 'worktree' = 'folder';
 		const isolationValue = isolationProperty.validate(request.config?.[SessionConfigKey.Isolation])
 			? request.config![SessionConfigKey.Isolation] as 'folder' | 'worktree'
 			: isolationDefault;

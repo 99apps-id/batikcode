@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import { createCliInvocation, resolveCliWorkingDirectory } from './cliProcess';
 
 export type OAuthBootstrapId = 'github-cli' | 'codex-cli' | 'gemini-cli' | 'kiro-client' | 'antigravity';
+export type CloudCodeOAuthId = Extract<OAuthBootstrapId, 'gemini-cli' | 'antigravity'>;
 
 export interface OAuthBootstrapStatus {
 	readonly available: boolean;
@@ -163,8 +164,8 @@ export class OAuthCliBootstrap {
 	private refreshInFlight = false;
 	/** In-flight token refreshes, keyed by provider, so callers share one exchange. */
 	private readonly refreshInFlightById = new Map<OAuthBootstrapId, Promise<StoredOAuthTokens>>();
-	/** Cloud Code project for Antigravity: resolved once, '' when entitled without one. */
-	private antigravityProject: string | undefined;
+	/** Cloud Code projects, resolved lazily per OAuth account type. */
+	private readonly cloudCodeProjects = new Map<CloudCodeOAuthId, string>();
 	private readonly statusCache = new Map<OAuthBootstrapId, { at: number; value: Promise<OAuthBootstrapStatus> }>();
 	private readonly chatModelsCache = new Map<OAuthBootstrapId, { at: number; value: Promise<readonly { id: string; name: string }[]> }>();
 	public readonly onDidChange = this.changeEmitter.event;
@@ -217,18 +218,6 @@ export class OAuthCliBootstrap {
 						? 'The OAuth token expired and could not be refreshed. Sign in again.'
 						: `Google OAuth token stored${tokens.refreshToken ? ' with automatic refresh' : ' without a refresh token'}.`
 				};
-			}
-			// For gemini-cli, also fall back to API key if no OAuth token.
-			if (id === 'gemini-cli') {
-				const key = await this.getGeminiApiKey();
-				if (key) {
-					return {
-						available: true,
-						connected: true,
-						label: 'API key configured',
-						detail: 'Gemini API key is configured in the router.'
-					};
-				}
 			}
 			return {
 				available: true,
@@ -301,27 +290,14 @@ export class OAuthCliBootstrap {
 			return [{ id: 'auto', name: 'Codex (Auto)' }];
 		}
 		if (id === 'gemini-cli') {
-			try {
-				const exec = await findExecutable(PROFILES['gemini-cli'].executable);
-				const raw = exec ? await run(exec, ['models', '--output-format', 'json']) : { exitCode: 1, stdout: '', stderr: '' };
-				if (raw.exitCode === 0 && raw.stdout.trim()) {
-					const models = JSON.parse(raw.stdout) as {
-						models?: readonly { id?: unknown; name?: unknown; available?: unknown }[];
-					};
-					const discovered = (models.models ?? [])
-						.filter(model => typeof model.id === 'string' && model.available !== false)
-						.map(model => ({
-							id: model.id as string,
-							name: typeof model.name === 'string' ? model.name : model.id as string
-						}));
-					if (discovered.length) {
-						return discovered;
-					}
-				}
-			} catch {
-				// The official client can still select its own default model.
-			}
-			return [{ id: 'auto', name: 'Gemini CLI (Auto)' }];
+			// Cloud Code's Gemini CLI preset uses OAuth directly, so the model list
+			// must not depend on a separate local Gemini CLI installation.
+			return [
+				{ id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview' },
+				{ id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
+				{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+				{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }
+			];
 		}
 		if (id === 'antigravity') {
 			// Antigravity Cloud Code models (from NesaRouter preset).
@@ -337,10 +313,11 @@ export class OAuthCliBootstrap {
 	}
 
 	/**
-	 * Chats through Cloud Code with the stored Antigravity token, refreshing it
-	 * first when due and resolving the project the call must be billed to.
+	 * Chats through Cloud Code with an OAuth token, refreshing it first when due
+	 * and resolving the project the selected provider is entitled to use.
 	 */
-	public async runAntigravityChat(
+	public async runCloudCodeChat(
+		id: CloudCodeOAuthId,
 		model: string,
 		contents: readonly CloudCodeTurn[],
 		systemInstruction: string | undefined,
@@ -348,27 +325,32 @@ export class OAuthCliBootstrap {
 		toolMode: 'auto' | 'required',
 		token: vscode.CancellationToken
 	): Promise<CloudCodeReply> {
-		const tokens = await this.getValidTokens('antigravity');
+		const tokens = await this.getValidTokens(id);
 		if (!tokens) {
-			throw new Error('Antigravity is not connected. Sign in from the Account & AI Provider Hub.');
+			throw new Error(`${PROFILES[id].displayName} is not connected. Sign in from the Account & AI Provider Hub.`);
 		}
 		if (tokens.expiresAt < Date.now()) {
-			throw new Error('The Antigravity token expired and could not be refreshed. Sign in again.');
+			throw new Error(`The ${PROFILES[id].displayName} token expired and could not be refreshed. Sign in again.`);
 		}
 
-		if (this.antigravityProject === undefined) {
-			this.antigravityProject = await loadCloudCodeProject(tokens.accessToken);
+		let project = this.cloudCodeProjects.get(id);
+		if (project === undefined) {
+			project = await loadCloudCodeProject(id, tokens.accessToken);
+			if (project) {
+				this.cloudCodeProjects.set(id, project);
+			}
 		}
-		if (this.antigravityProject === undefined) {
-			throw new Error('Antigravity rejected the stored token. Sign in again from the Account & AI Provider Hub.');
+		if (!project) {
+			throw new Error(`${PROFILES[id].displayName} needs a Cloud Code project. Reconnect OAuth or use a Google account with Code Assist access.`);
 		}
 
 		const controller = new AbortController();
 		const cancellation = token.onCancellationRequested(() => controller.abort());
 		try {
-			return await runCloudCodeChat(
+			return await requestCloudCodeChat(
+				id,
 				tokens.accessToken,
-				this.antigravityProject,
+				project,
 				model,
 				contents,
 				systemInstruction,
@@ -381,7 +363,7 @@ export class OAuthCliBootstrap {
 		}
 	}
 
-	/** Antigravity is deliberately absent: it speaks HTTP, see {@link runAntigravityChat}. */
+	/** Cloud Code providers use {@link runCloudCodeChat}; Codex uses its official CLI. */
 	public async runChat(id: 'codex-cli' | 'gemini-cli', model: string, prompt: string, token: vscode.CancellationToken): Promise<string> {
 		const profile = PROFILES[id];
 		const executable = await findExecutable(profile.executable);
@@ -454,7 +436,7 @@ export class OAuthCliBootstrap {
 
 		// Gemini CLI + Antigravity: built-in PKCE manual code paste OAuth flow.
 		if ((id === 'antigravity' || id === 'gemini-cli') && profile.oauthFlow) {
-			await this.connectAntigravity(profile);
+			await this.connectGoogleOAuth(profile);
 			return;
 		}
 
@@ -489,10 +471,10 @@ export class OAuthCliBootstrap {
 	}
 
 	/**
-	 * Runs the Antigravity (Google Cloud Code) PKCE loopback OAuth flow.
+	 * Runs the Google Cloud Code PKCE OAuth flow used by Gemini CLI and Antigravity.
 	 * Based on the NesaRouter Antigravity preset implementation.
 	 */
-	private async connectAntigravity(profile: OAuthBootstrapProfile): Promise<void> {
+	private async connectGoogleOAuth(profile: OAuthBootstrapProfile): Promise<void> {
 		const flow = profile.oauthFlow!;
 
 		// Generate PKCE code verifier (43-128 chars) and challenge (S256).
@@ -593,7 +575,7 @@ export class OAuthCliBootstrap {
 		}
 
 		// Store tokens securely.
-		await this.storeAntigravityTokens(profile.id, {
+		await this.storeOAuthTokens(profile.id, {
 			accessToken: tokens.access_token,
 			refreshToken: tokens.refresh_token,
 			// A missing expires_in would otherwise store NaN, which compares false
@@ -605,7 +587,7 @@ export class OAuthCliBootstrap {
 
 		// Validate the token by calling the loadCodeAssist endpoint.
 		try {
-			const valid = await validateAntigravityToken(tokens.access_token);
+			const valid = await validateCloudCodeToken(profile.id as CloudCodeOAuthId, tokens.access_token);
 			if (!valid) {
 				this.output.appendLine(`[oauth] ${displayName}: token validation failed — token may not have Cloud Code access.`);
 				void vscode.window.showWarningMessage(
@@ -620,19 +602,19 @@ export class OAuthCliBootstrap {
 		await this.refreshModelAvailability(true);
 	}
 
-	private async storeAntigravityTokens(providerId: string, tokens: { accessToken: string; refreshToken?: string; expiresAt: number }): Promise<void> {
+	private async storeOAuthTokens(providerId: OAuthBootstrapId, tokens: StoredOAuthTokens): Promise<void> {
 		await this.context.secrets.store(`batikcode.oauth.${providerId}`, JSON.stringify(tokens));
 		// The cached probe answers predate these tokens; leaving them would report
 		// the provider as disconnected until the TTL lapsed.
-		this.statusCache.delete(providerId as OAuthBootstrapId);
-		this.chatModelsCache.delete(providerId as OAuthBootstrapId);
-		if (providerId === 'antigravity') {
+		this.statusCache.delete(providerId);
+		this.chatModelsCache.delete(providerId);
+		if (isCloudCodeOAuthId(providerId)) {
 			// A different account may be entitled to a different project.
-			this.antigravityProject = undefined;
+			this.cloudCodeProjects.delete(providerId);
 		}
 	}
 
-	private async getAntigravityTokens(providerId: string): Promise<StoredOAuthTokens | undefined> {
+	private async getOAuthTokens(providerId: OAuthBootstrapId): Promise<StoredOAuthTokens | undefined> {
 		try {
 			const stored = await this.context.secrets.get(`batikcode.oauth.${providerId}`);
 			return stored ? JSON.parse(stored) : undefined;
@@ -648,7 +630,7 @@ export class OAuthCliBootstrap {
 	 * refresh token is on hand.
 	 */
 	private async getValidTokens(id: OAuthBootstrapId): Promise<StoredOAuthTokens | undefined> {
-		const tokens = await this.getAntigravityTokens(id);
+		const tokens = await this.getOAuthTokens(id);
 		if (!tokens || tokens.expiresAt >= Date.now() + TOKEN_REFRESH_LEAD_MS || !tokens.refreshToken) {
 			return tokens;
 		}
@@ -697,7 +679,7 @@ export class OAuthCliBootstrap {
 				refreshToken: refreshed.refresh_token ?? tokens.refreshToken,
 				expiresAt: Date.now() + (refreshed.expires_in ?? 3600) * 1000
 			};
-			await this.storeAntigravityTokens(id, updated);
+			await this.storeOAuthTokens(id, updated);
 			this.output.appendLine(`[oauth] ${PROFILES[id].displayName}: token refreshed (expires in ${refreshed.expires_in ?? 3600}s)`);
 			return updated;
 		} catch (error) {
@@ -1053,25 +1035,45 @@ async function runWithRetry(
 	throw lastError;
 }
 
-/**
- * Validates an Antigravity access token by calling the Cloud Code loadCodeAssist endpoint.
- * Returns true if the token is valid and has a Cloud Code project.
- */
 const CLOUD_CODE_BASE_URL = 'https://cloudcode-pa.googleapis.com/v1internal';
 
-/** Identifies BatikCode to Cloud Code the way the Antigravity client does. */
-function cloudCodeHeaders(accessToken: string): Record<string, string> {
+interface CloudCodeProfile {
+	readonly headers: Readonly<Record<string, string>>;
+	readonly metadata: Readonly<Record<string, string>>;
+}
+
+const CLOUD_CODE_PROFILES: Readonly<Record<CloudCodeOAuthId, CloudCodeProfile>> = {
+	'gemini-cli': {
+		headers: {
+			'User-Agent': 'google-genai-sdk/1.41.0 gl-node/v22.19.0',
+			'X-Goog-Api-Client': 'google-genai-sdk/1.41.0 gl-node/v22.19.0'
+		},
+		metadata: { ideType: 'GEMINI_CLI', platform: 'PLATFORM_UNSPECIFIED', pluginType: 'GEMINI' }
+	},
+	antigravity: {
+		headers: {
+			'User-Agent': 'antigravity/ide/2.1.1',
+			'X-Goog-Api-Client': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
+			'Client-Metadata': JSON.stringify({ ideType: 9, platform: 5, pluginType: 2 })
+		},
+		metadata: { ideType: 'ANTIGRAVITY', platform: 'PLATFORM_UNSPECIFIED', pluginType: 'GEMINI' }
+	}
+};
+
+function isCloudCodeOAuthId(id: OAuthBootstrapId): id is CloudCodeOAuthId {
+	return id === 'gemini-cli' || id === 'antigravity';
+}
+
+function cloudCodeHeaders(id: CloudCodeOAuthId, accessToken: string): Record<string, string> {
 	return {
 		'Content-Type': 'application/json',
 		Authorization: `Bearer ${accessToken}`,
-		'User-Agent': 'antigravity/ide/2.1.1',
-		'X-Goog-Api-Client': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
-		'Client-Metadata': JSON.stringify({ ideType: 9, platform: 5, pluginType: 2 })
+		...CLOUD_CODE_PROFILES[id].headers
 	};
 }
 
-async function validateAntigravityToken(accessToken: string): Promise<boolean> {
-	return (await loadCloudCodeProject(accessToken)) !== undefined;
+async function validateCloudCodeToken(id: CloudCodeOAuthId, accessToken: string): Promise<boolean> {
+	return Boolean(await loadCloudCodeProject(id, accessToken));
 }
 
 /**
@@ -1079,25 +1081,73 @@ async function validateAntigravityToken(accessToken: string): Promise<boolean> {
  * generateContent call must carry it, so a token alone is not enough to chat.
  * Returns undefined when the endpoint rejects the token.
  */
-async function loadCloudCodeProject(accessToken: string): Promise<string | undefined> {
+async function loadCloudCodeProject(id: CloudCodeOAuthId, accessToken: string): Promise<string | undefined> {
 	try {
 		const response = await fetch(`${CLOUD_CODE_BASE_URL}:loadCodeAssist`, {
 			method: 'POST',
-			headers: cloudCodeHeaders(accessToken),
-			body: JSON.stringify({ metadata: { ideType: 'IDE_UNSPECIFIED', platform: 'PLATFORM_UNSPECIFIED', pluginType: 'GEMINI' } }),
+			headers: cloudCodeHeaders(id, accessToken),
+			body: JSON.stringify({ metadata: CLOUD_CODE_PROFILES[id].metadata }),
 			signal: AbortSignal.timeout(20_000)
 		});
 		if (!response.ok) {
 			return undefined;
 		}
-		const payload = await response.json() as { cloudaicompanionProject?: unknown; project?: unknown };
-		const project = payload.cloudaicompanionProject ?? payload.project;
-		// An entitled token with no project still authenticates; '' keeps that
-		// distinct from "rejected" while remaining falsy for callers that need one.
-		return typeof project === 'string' ? project : '';
+		const payload = await response.json() as CloudCodeProjectResponse;
+		const project = cloudCodeProjectId(payload);
+		if (project) {
+			return project;
+		}
+
+		// Free Code Assist accounts receive their project asynchronously. Mirror
+		// the official CLI flow instead of advertising OAuth as ready too early.
+		const tierId = payload.currentTier?.id === 'FREE'
+			? 'FREE'
+			: payload.allowedTiers?.find(tier => tier.isDefault)?.id;
+		if (tierId !== 'FREE') {
+			return '';
+		}
+		const onboardUrl = `${CLOUD_CODE_BASE_URL}:onboardUser`;
+		for (let attempt = 0; attempt < 10; attempt++) {
+			const onboardResponse = await fetch(onboardUrl, {
+				method: 'POST',
+				headers: cloudCodeHeaders(id, accessToken),
+				body: JSON.stringify({ tierId, metadata: CLOUD_CODE_PROFILES[id].metadata }),
+				signal: AbortSignal.timeout(20_000)
+			});
+			if (!onboardResponse.ok) {
+				return '';
+			}
+			const onboardPayload = await onboardResponse.json() as CloudCodeProjectResponse;
+			const onboardedProject = cloudCodeProjectId(onboardPayload);
+			if (onboardedProject) {
+				return onboardedProject;
+			}
+			if (onboardPayload.done) {
+				return '';
+			}
+			await new Promise(resolve => setTimeout(resolve, 5_000));
+		}
+		return '';
 	} catch {
 		return undefined;
 	}
+}
+
+interface CloudCodeProjectResponse {
+	readonly cloudaicompanionProject?: string | { readonly id?: string };
+	readonly project?: string | { readonly id?: string };
+	readonly response?: { readonly cloudaicompanionProject?: string | { readonly id?: string } };
+	readonly currentTier?: { readonly id?: string };
+	readonly allowedTiers?: readonly { readonly id?: string; readonly isDefault?: boolean }[];
+	readonly done?: boolean;
+}
+
+function cloudCodeProjectId(payload: CloudCodeProjectResponse): string | undefined {
+	const value = payload.cloudaicompanionProject ?? payload.project ?? payload.response?.cloudaicompanionProject;
+	if (typeof value === 'string') {
+		return value.trim() || undefined;
+	}
+	return value?.id?.trim() || undefined;
 }
 
 /** A tool the model may call, in the shape Gemini declares them. */
@@ -1119,13 +1169,14 @@ export interface CloudCodeReply {
 }
 
 /**
- * Sends a conversation through Cloud Code using an Antigravity OAuth token.
+ * Sends a conversation through Cloud Code using a Gemini CLI or Antigravity OAuth token.
  *
  * Unlike the CLI transports, this speaks Gemini's HTTP API directly, so it can
  * declare tools and return the model's `functionCall` parts — which is what lets
- * Antigravity models drive agent mode instead of only answering questions.
+ * Cloud Code models drive agent mode instead of only answering questions.
  */
-async function runCloudCodeChat(
+async function requestCloudCodeChat(
+	id: CloudCodeOAuthId,
 	accessToken: string,
 	project: string,
 	model: string,
@@ -1152,13 +1203,13 @@ async function runCloudCodeChat(
 
 	const response = await fetch(`${CLOUD_CODE_BASE_URL}:generateContent`, {
 		method: 'POST',
-		headers: cloudCodeHeaders(accessToken),
+		headers: cloudCodeHeaders(id, accessToken),
 		body: JSON.stringify({ project, model, request }),
 		signal
 	});
 	if (!response.ok) {
 		const detail = (await response.text().catch(() => '')).slice(0, 300);
-		throw new Error(`Antigravity request failed (HTTP ${response.status}): ${detail}`);
+		throw new Error(`${PROFILES[id].displayName} request failed (HTTP ${response.status}): ${detail}`);
 	}
 
 	type Part = { text?: unknown; functionCall?: { name?: unknown; args?: unknown } };
@@ -1182,7 +1233,7 @@ async function runCloudCodeChat(
 		}));
 
 	if (!text && !toolCalls.length) {
-		throw new Error('Antigravity returned neither text nor a tool call.');
+		throw new Error(`${PROFILES[id].displayName} returned neither text nor a tool call.`);
 	}
 	return { text, toolCalls };
 }

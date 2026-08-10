@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { URI } from '../../../base/common/uri.js';
+
 export interface INativeCliOptions {
 	'cli-data-dir'?: string;
 	'disable-telemetry'?: boolean;
@@ -178,4 +180,23 @@ export interface NativeParsedArgs {
 	'trace-startup-file'?: string;
 	'trace-startup-duration'?: string;
 	'xdg-portal-required-version'?: string;
+}
+
+/**
+ * Returns the workspace folder requested for the Agent workbench.
+ * A folder URI is preferred because it has already been disambiguated by the
+ * caller. A single positional path retains the normal desktop CLI behaviour.
+ */
+export function getAgentsFolderUri(args: NativeParsedArgs): URI | undefined {
+	const folderUri = args['folder-uri']?.[0];
+	if (folderUri) {
+		try {
+			return URI.parse(folderUri);
+		} catch {
+			return undefined;
+		}
+	}
+
+	const positionalPath = !args['file-uri']?.length && args._.length === 1 ? args._[0] : undefined;
+	return positionalPath ? URI.file(positionalPath) : undefined;
 }

@@ -132,11 +132,12 @@ export class BatikCodeLanguageModelProvider implements vscode.LanguageModelChatP
 				progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, call.arguments));
 				emittedToolCalls++;
 			}
-		} else if (model.transport === 'antigravity') {
+		} else if (model.transport === 'antigravity' || model.transport === 'gemini-cli') {
 			// Cloud Code speaks Gemini over HTTP, so unlike the CLI transports it
 			// can declare tools and return functionCall parts — which is what makes
 			// these models usable in agent mode.
-			const reply = await this.oauth.runAntigravityChat(
+			const reply = await this.oauth.runCloudCodeChat(
+				model.transport,
 				selectedModelId,
 				toCloudCodeContents(normalized),
 				providerIdentity(model.providerName, model.transport, selectedModelId),
@@ -240,7 +241,7 @@ function modelInformation(
 		name: displayModel,
 		family: model,
 		version: '1',
-		tooltip: `${provider.name} through ${transport === 'router' ? 'BatikCode secure key routing' : 'the official authenticated CLI'}`,
+		tooltip: `${provider.name} through ${transport === 'router' ? 'BatikCode secure key routing' : transport === 'codex-cli' ? 'the official authenticated CLI' : 'Cloud Code OAuth'}`,
 		detail: provider.name,
 		maxInputTokens: 128_000,
 		maxOutputTokens: 16_384,
@@ -330,7 +331,7 @@ function modelCapabilities(
 	model: string,
 	transport: BatikCodeModel['transport']
 ): vscode.LanguageModelChatCapabilities {
-	if (transport === 'antigravity') {
+	if (transport === 'antigravity' || transport === 'gemini-cli') {
 		// Cloud Code is reached over HTTP with Gemini's function-calling API, so
 		// this transport really can drive the agent loop.
 		return { toolCalling: true, imageInput: true };

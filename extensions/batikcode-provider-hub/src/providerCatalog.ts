@@ -71,7 +71,7 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
 		vendor: 'gemini',
 		name: 'Gemini CLI OAuth',
 		shortName: 'GC',
-		description: 'Start and test the Google account flow managed by the official Gemini CLI.',
+		description: 'Sign in with Google and use Gemini Code Assist through the Cloud Code OAuth preset.',
 		kind: 'subscription',
 		action: 'oauthBootstrap',
 		oauthBootstrapId: 'gemini-cli',

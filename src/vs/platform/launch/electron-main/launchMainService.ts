@@ -9,7 +9,7 @@ import { IProcessEnvironment, isMacintosh } from '../../../base/common/platform.
 import { URI } from '../../../base/common/uri.js';
 import { whenDeleted } from '../../../base/node/pfs.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
-import { NativeParsedArgs } from '../../environment/common/argv.js';
+import { getAgentsFolderUri, NativeParsedArgs } from '../../environment/common/argv.js';
 import { isLaunchedFromCli } from '../../environment/node/argvHelper.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 import { ILogService } from '../../log/common/log.js';
@@ -145,7 +145,7 @@ export class LaunchMainService implements ILaunchMainService {
 
 		// Agents window
 		else if (args['agents']) {
-			usedWindows = await this.windowsMainService.openAgentsWindow(baseConfig);
+			usedWindows = await this.windowsMainService.openAgentsWindow(baseConfig, getAgentsFolderUri(args));
 		}
 
 		// Start without file/folder arguments
